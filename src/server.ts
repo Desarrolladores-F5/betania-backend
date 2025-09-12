@@ -1,0 +1,90 @@
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import dotenv from "dotenv";
+import path from "path";
+import sequelize from "./config/database";
+
+// Modelos base
+import "./models/rol.model";
+import "./models/usuario.model";
+
+// Contenido
+import "./models/curso.model";
+import "./models/modulo.model";
+import "./models/leccion.model";
+
+// Exámenes
+import "./models/examen.model";
+import "./models/pregunta.model";
+import "./models/alternativa.model";
+import "./models/intento_examen.model";
+import "./models/respuesta_intento.model";
+
+// IMPORTANTE: las asociaciones Intento⇄Examen/Usuario están dentro de intento_examen.model.ts
+
+import { initData } from "./utils/initData";
+
+import authRoutes from "./routes/auth.routes";
+import adminRoutes from "./routes/admin.routes";
+import adminCursosRoutes from "./routes/admin.cursos.routes";
+import adminModulosRoutes from "./routes/admin.modulos.routes";
+import adminLeccionesRoutes from "./routes/admin.lecciones.routes";
+import adminUploadsRoutes from "./routes/admin.uploads.routes";
+import adminExamenesRoutes from "./routes/admin.examenes.routes";
+import adminReportesRoutes from "./routes/admin.reportes.routes";
+
+import cursosRoutes from "./routes/cursos.routes";
+import examenesRoutes from "./routes/examenes.routes";
+
+dotenv.config();
+
+const app = express();
+
+app.use(helmet());
+app.use(cors({
+  origin: "http://localhost:3000",
+  credentials: true
+}));
+app.use(express.json());
+app.use(morgan("dev"));
+
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+
+// Auth y admin
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/cursos", adminCursosRoutes);
+app.use("/api/admin/modulos", adminModulosRoutes);
+app.use("/api/admin/lecciones", adminLeccionesRoutes);
+app.use("/api/admin/uploads", adminUploadsRoutes);
+app.use("/api/admin/examenes", adminExamenesRoutes);
+app.use("/api/admin", adminReportesRoutes); // <-- monta /intentos y /reportes/examenes
+
+// Usuario (contenido/exámenes)
+app.use("/api/cursos", cursosRoutes);
+app.use("/api/examenes", examenesRoutes);
+
+// 404
+app.use((_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
+
+const PORT = Number(process.env.PORT || 3001);
+
+async function start() {
+  try {
+    await sequelize.authenticate();
+    await sequelize.sync({ alter: true });
+    await initData();
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    });
+  } catch (e) {
+    console.error("Error al iniciar servidor:", e);
+    process.exit(1);
+  }
+}
+
+start();
