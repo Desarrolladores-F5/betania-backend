@@ -1,21 +1,25 @@
 import { Router } from "express";
-import { requireAuth, requireAdmin } from "../middlewares/auth";
+import path from "path";
 import { uploadImage, uploadPdf } from "../utils/upload";
 
 const router = Router();
 
-router.post("/imagen", requireAuth, requireAdmin, uploadImage.single("file"), (req, res) => {
-  const file = (req as any).file;
+router.post("/imagen", uploadImage.single("file"), (req, res) => {
+  const file = (req as any).file as Express.Multer.File | undefined;
   if (!file) return res.status(400).json({ error: "Archivo requerido" });
-  const url = `/uploads/images/${file.filename}`;
-  return res.status(201).json({ url });
+
+  const relative = `/uploads/images/${file.filename}`;
+  const absolute = `${req.protocol}://${req.get("host")}${relative}`;
+  return res.status(201).json({ url: absolute, filename: path.basename(file.filename), size: file.size, mimetype: file.mimetype });
 });
 
-router.post("/pdf", requireAuth, requireAdmin, uploadPdf.single("file"), (req, res) => {
-  const file = (req as any).file;
+router.post("/pdf", uploadPdf.single("file"), (req, res) => {
+  const file = (req as any).file as Express.Multer.File | undefined;
   if (!file) return res.status(400).json({ error: "Archivo requerido" });
-  const url = `/uploads/pdfs/${file.filename}`;
-  return res.status(201).json({ url });
+
+  const relative = `/uploads/pdfs/${file.filename}`;
+  const absolute = `${req.protocol}://${req.get("host")}${relative}`;
+  return res.status(201).json({ url: absolute, filename: path.basename(file.filename), size: file.size, mimetype: file.mimetype });
 });
 
 export default router;
