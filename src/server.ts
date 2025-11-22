@@ -1,37 +1,33 @@
+// src/server.ts
 import express from "express";
 import cors from "cors";
-import helmet, { crossOriginResourcePolicy } from "helmet";
+import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import path from "path";
+import cookieParser from "cookie-parser";
 import sequelize from "./config/database";
 
-// ====== Modelos base ======
+// ⚠️ Importar modelos ANTES de sync
 import "./models/rol.model";
 import "./models/usuario.model";
-
-// ====== Contenido ======
 import "./models/curso.model";
 import "./models/modulo.model";
 import "./models/leccion.model";
-
-// ====== Exámenes ======
 import "./models/examen.model";
 import "./models/pregunta.model";
 import "./models/alternativa.model";
 import "./models/intento_examen.model";
 import "./models/respuesta_intento.model";
-// IMPORTANTE: las asociaciones Intento⇄Examen/Usuario están dentro de intento_examen.model.ts
+
+// ⬅️ Usaremos el modelo Leccion en los GET de lectura
+import { Leccion } from "./models/leccion.model";
 
 import { initData } from "./utils/initData";
-
-// ====== Middlewares de auth (protección /api/admin) ======
 import { requireAuth, requireAdmin } from "./middlewares/auth";
 
-// ====== Rutas públicas / autenticación ======
+// Rutas existentes
 import authRoutes from "./routes/auth.routes";
-
-// ====== Rutas admin (todas quedarán bajo /api/admin, ya protegidas) ======
 import adminRoutes from "./routes/admin.routes";
 import adminUsuariosRoutes from "./routes/admin.usuarios.routes";
 import adminCursosRoutes from "./routes/admin.cursos.routes";
@@ -40,8 +36,6 @@ import adminLeccionesRoutes from "./routes/admin.lecciones.routes";
 import adminUploadsRoutes from "./routes/admin.uploads.routes";
 import adminExamenesRoutes from "./routes/admin.examenes.routes";
 import adminReportesRoutes from "./routes/admin.reportes.routes";
-
-// ====== Rutas para usuarios finales (no admin) ======
 import cursosRoutes from "./routes/cursos.routes";
 import examenesRoutes from "./routes/examenes.routes";
 
@@ -49,35 +43,46 @@ dotenv.config();
 
 const app = express();
 
-// -------- Middlewares globales --------
-app.use(helmet());
+// ==================================================
+// 🛡️ Seguridad global y middlewares base
+// ==================================================
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
-// CORS para el frontend
 app.use(
   cors({
-    origin: "http://localhost:3000",
-    credentials: true,
-  }),
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true, // Permite cookies entre dominios
+  })
 );
-app.use(express.json());
+
+app.use(express.json({ limit: "10mb" }));
+app.use(cookieParser());
 app.use(morgan("dev"));
 
-// Archivos estáticos (subidas)
-// Permite que otro origen (3000) use /uploads (evita CORP=same-origin de helmet)
-app.use("/uploads", crossOriginResourcePolicy({ policy: "cross-origin" }));
+// ==================================================
+// 📁 Archivos estáticos
+// ==================================================
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// Healthcheck
+// ==================================================
+// ❤️ Healthcheck
+// ==================================================
 app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
 
-// -------- Rutas públicas --------
+// ==================================================
+// 🔓 Rutas públicas
+// ==================================================
 app.use("/api/auth", authRoutes);
 
-// -------- Protección del namespace /api/admin --------
+// ==================================================
+// 🔐 Rutas protegidas (Admin base + subrutas existentes)
+// ==================================================
 app.use("/api/admin", requireAuth, requireAdmin);
-
-// -------- Rutas administrativas (heredan la protección anterior) --------
-app.use("/api/admin", adminRoutes); // ej: /api/admin/ping
+app.use("/api/admin", adminRoutes);
 app.use("/api/admin/usuarios", adminUsuariosRoutes);
 app.use("/api/admin/cursos", adminCursosRoutes);
 app.use("/api/admin/modulos", adminModulosRoutes);
@@ -86,26 +91,100 @@ app.use("/api/admin/uploads", adminUploadsRoutes);
 app.use("/api/admin/examenes", adminExamenesRoutes);
 app.use("/api/admin", adminReportesRoutes);
 
-// -------- Rutas de área de alumnos/usuarios (contenido/exámenes) --------
+/* ==================================================
+   ✅ ENDPOINTS DE LECTURA PARA LECCIONES
+   (compatibles con tu frontend actual)
+   ================================================== */
+
+// GET /api/admin/lecciones?modulo_id=4
+app.get(
+  "/api/admin/lecciones",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { modulo_id } = req.query as { modulo_id?: string };
+      const where = modulo_id ? { modulo_id: Number(modulo_id) } : undefined;
+      const filas = await Leccion.findAll({ where });
+      // Devolvemos arreglo plano para que tu normalizador lo acepte
+      return res.json(filas);
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: "No fue posible listar las lecciones" });
+    }
+  }
+);
+
+// GET /api/admin/lecciones/:id
+app.get(
+  "/api/admin/lecciones/:id",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const item = await Leccion.findByPk(id);
+      if (!item) return res.status(404).json({ error: "Lección no encontrada" });
+      return res.json(item);
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: "No fue posible obtener la lección" });
+    }
+  }
+);
+
+// GET /api/admin/modulos/:moduloId/lecciones  ← ruta anidada que usa tu UI
+app.get(
+  "/api/admin/modulos/:moduloId/lecciones",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { moduloId } = req.params;
+      const lecciones = await Leccion.findAll({
+        where: { modulo_id: Number(moduloId) },
+        order: [["orden", "ASC"], ["id", "ASC"]],
+      });
+
+      // Estructura amigable (tu frontend soporta { lecciones: [...] } y lista plana)
+      return res.json({ moduloId: Number(moduloId), lecciones });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: "No fue posible obtener las lecciones del módulo" });
+    }
+  }
+);
+
+// ==================================================
+// 🎓 Rutas públicas de usuario final
+// ==================================================
 app.use("/api/cursos", cursosRoutes);
 app.use("/api/examenes", examenesRoutes);
 
-// 404 genérico
+// ==================================================
+// 🚫 404 genérico
+// ==================================================
 app.use((_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
 
+// ==================================================
+// 🚀 Inicialización del servidor
+// ==================================================
 const PORT = Number(process.env.PORT || 3001);
 
 async function start() {
   try {
     await sequelize.authenticate();
-    await sequelize.sync({ alter: true });
+
+    // Evita recrear índices/llaves (previene ER_TOO_MANY_KEYS)
+    await sequelize.sync();
+
     await initData();
 
     app.listen(PORT, () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
     });
-  } catch (e) {
-    console.error("Error al iniciar servidor:", e);
+  } catch (error) {
+    console.error("❌ Error al iniciar servidor:", error);
     process.exit(1);
   }
 }
