@@ -2,6 +2,9 @@
 import { Request, Response } from "express";
 import { Modulo } from "../models/modulo.model";
 import { Curso } from "../models/curso.model";
+import { Leccion } from "../models/leccion.model";
+import { ProgresoModulo } from "../models/progreso_modulo.model";
+import { ProgresoLeccion } from "../models/progreso_leccion.model";
 
 // -----------------------------------------------------------------------------
 // POST /api/admin/modulos
@@ -18,7 +21,6 @@ export const crearModulo = async (req: Request, res: Response) => {
       pdf_intro_url,
     } = req.body ?? {};
 
-    // curso_id: validación robusta (acepta string o number)
     const parsedCursoId = Number(curso_id);
     if (!Number.isFinite(parsedCursoId)) {
       return res.status(400).json({ error: "curso_id debe ser number" });
@@ -33,19 +35,14 @@ export const crearModulo = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "curso_id inválido" });
     }
 
-    // Normalización de video_intro_url (solo URL escrita)
     const finalVideoIntroUrl =
       typeof video_intro_url === "string" && video_intro_url.trim().length > 0
         ? video_intro_url.trim()
         : null;
 
-    // Normalización de pdf_intro_url:
-    // - si viene archivo (req.file) desde uploadPdf.single("pdf_intro") → usamos ese
-    // - si NO viene archivo, usamos el valor enviado en el body (si existe)
     let finalPdfIntroUrl: string | null = null;
 
     if (req.file) {
-      // uploadPdf lo guarda en uploads/pdfs
       finalPdfIntroUrl = `/uploads/pdfs/${req.file.filename}`;
     } else if (
       typeof pdf_intro_url === "string" &&
@@ -107,7 +104,6 @@ export const actualizarModulo = async (req: Request, res: Response) => {
       pdf_intro_url?: string | null;
     } = {};
 
-    // curso_id (opcional)
     if (curso_id !== undefined) {
       const parsedCursoId = Number(curso_id);
       if (!Number.isFinite(parsedCursoId)) {
@@ -120,7 +116,6 @@ export const actualizarModulo = async (req: Request, res: Response) => {
       payload.curso_id = parsedCursoId;
     }
 
-    // titulo (opcional)
     if (titulo !== undefined) {
       if (typeof titulo !== "string" || !titulo.trim()) {
         return res.status(400).json({ error: "titulo inválido" });
@@ -128,13 +123,11 @@ export const actualizarModulo = async (req: Request, res: Response) => {
       payload.titulo = titulo.trim();
     }
 
-    // descripcion (opcional)
     if (descripcion !== undefined) {
       payload.descripcion =
         typeof descripcion === "string" ? descripcion : null;
     }
 
-    // orden (opcional)
     if (orden !== undefined) {
       const parsedOrden = Number(orden);
       if (!Number.isFinite(parsedOrden)) {
@@ -143,7 +136,6 @@ export const actualizarModulo = async (req: Request, res: Response) => {
       payload.orden = parsedOrden;
     }
 
-    // activo (opcional)
     if (activo !== undefined) {
       if (typeof activo !== "boolean") {
         return res.status(400).json({ error: "activo debe ser boolean" });
@@ -151,7 +143,6 @@ export const actualizarModulo = async (req: Request, res: Response) => {
       payload.activo = activo;
     }
 
-    // video_intro_url (opcional, solo texto)
     if (video_intro_url !== undefined) {
       payload.video_intro_url =
         typeof video_intro_url === "string" &&
@@ -160,9 +151,6 @@ export const actualizarModulo = async (req: Request, res: Response) => {
           : null;
     }
 
-    // pdf_intro_url:
-    // - si viene archivo, PRIORIDAD al archivo
-    // - si no hay archivo pero viene pdf_intro_url en body, normalizamos string/null
     if (req.file) {
       payload.pdf_intro_url = `/uploads/pdfs/${req.file.filename}`;
     } else if (pdf_intro_url !== undefined) {
@@ -259,6 +247,150 @@ export const listarModulosPorCurso = async (req: Request, res: Response) => {
     console.error(e);
     return res.status(500).json({
       error: "No se pudieron listar los módulos del curso",
+    });
+  }
+};
+
+// =====================================================================
+//  ENDPOINT ALUMNO: GET /api/cursos/:cursoId/modulos/:moduloId
+// =====================================================================
+export const obtenerModuloAlumno = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    if (!user?.id) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+    const usuarioId = Number(user.id);
+
+    const { cursoId, moduloId } = req.params;
+
+    const cursoIdNum = Number(cursoId);
+    const moduloIdNum = Number(moduloId);
+
+    if (!Number.isFinite(cursoIdNum) || !Number.isFinite(moduloIdNum)) {
+      return res.status(400).json({ error: "Parámetros inválidos" });
+    }
+
+    // 1) Buscar el módulo con sus lecciones, asegurando que pertenece al curso
+    const modulo = await Modulo.findOne({
+      where: { id: moduloIdNum, curso_id: cursoIdNum },
+      attributes: [
+        "id",
+        "curso_id",
+        "titulo",
+        "descripcion",
+        "orden",
+        "video_intro_url", // 👈 nuevos campos
+        "pdf_intro_url",   // 👈
+      ],
+      include: [
+        {
+          model: Leccion,
+          as: "lecciones",
+          attributes: [
+            "id",
+            "titulo",
+            "descripcion",
+            "orden",
+            "youtube_id",
+            "pdf_url",
+            "publicado",
+          ],
+        },
+      ],
+    });
+
+    if (!modulo) {
+      return res.status(404).json({ error: "Módulo no encontrado" });
+    }
+
+    // 2) Comprobar progreso del módulo
+    const progModulo = await ProgresoModulo.findOne({
+      where: {
+        usuario_id: usuarioId,
+        curso_id: cursoIdNum,
+        modulo_id: moduloIdNum,
+      },
+    });
+
+    if (!progModulo || progModulo.estado === "bloqueado") {
+      return res
+        .status(403)
+        .json({ error: "Módulo bloqueado para este usuario" });
+    }
+
+    // 3) Progreso de lecciones para este módulo
+    const progresoLecciones = await ProgresoLeccion.findAll({
+      where: {
+        usuario_id: usuarioId,
+        curso_id: cursoIdNum,
+        modulo_id: moduloIdNum,
+      },
+    });
+
+    const progPorLeccion = new Map<number, ProgresoLeccion>();
+    for (const p of progresoLecciones) {
+      progPorLeccion.set(Number(p.leccion_id), p);
+    }
+
+    const json = modulo.toJSON() as any;
+    const leccionesRaw: any[] = Array.isArray(json.lecciones)
+      ? json.lecciones
+      : [];
+
+    const leccionesOrdenadas = leccionesRaw
+      .map((l: any) => {
+        const id = Number(l.id);
+        const orden =
+          typeof l.orden === "number"
+            ? l.orden
+            : l.orden != null
+            ? Number(l.orden)
+            : null;
+
+        const prog = progPorLeccion.get(id);
+        const estado = prog?.estado ?? "bloqueada";
+        const aprobado = prog ? Boolean(prog.aprobado) : false;
+        const nota = prog?.nota_ultima_prueba ?? null;
+
+        return {
+          id,
+          titulo: l.titulo,
+          descripcion: l.descripcion,
+          orden,
+          youtube_id: l.youtube_id,
+          pdf_url: l.pdf_url,
+          publicado: l.publicado === true,
+          estado,
+          aprobado,
+          nota_ultima_prueba: nota,
+        };
+      })
+      .filter((l) => l.publicado && l.estado !== "bloqueada")
+      .sort((a, b) => {
+        const ao = a.orden ?? 9999;
+        const bo = b.orden ?? 9999;
+        if (ao !== bo) return ao - bo;
+        return a.id - b.id;
+      });
+
+    const respuesta = {
+      id: Number(json.id),
+      curso_id: Number(json.curso_id),
+      titulo: json.titulo,
+      descripcion: json.descripcion,
+      orden: json.orden,
+      video_intro_url: json.video_intro_url ?? null, 
+      pdf_intro_url: json.pdf_intro_url ?? null,    
+      estado: progModulo.estado, 
+      lecciones: leccionesOrdenadas,
+    };
+
+    return res.json(respuesta);
+  } catch (e) {
+    console.error("Error al obtener módulo para alumno:", e);
+    return res.status(500).json({
+      error: "Error al obtener información del módulo",
     });
   }
 };

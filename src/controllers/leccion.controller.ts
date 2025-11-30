@@ -2,6 +2,7 @@
 import { Request, Response } from "express";
 import { Leccion } from "../models/leccion.model";
 import { Modulo } from "../models/modulo.model";
+import { ProgresoLeccion } from "../models/progreso_leccion.model";
 
 /* =========================
  *  ADMIN – LISTAR (opcionalmente por módulo)
@@ -80,13 +81,19 @@ export const crearLeccion = async (req: Request, res: Response) => {
   try {
     const {
       modulo_id,
-      examen_id,              // 👈 opcional
+      examen_id, // opcional
       titulo,
       descripcion,
+      // 👇 NUEVOS CAMPOS: PDF de contenido principal
+      contenido_pdf_url,
+      contenido_pdf_titulo,
+      // video principal
       youtube_id,
       youtube_titulo,
+      // video adicional
       youtube_id_extra,
       youtube_titulo_extra,
+      // PDF de apoyo
       pdf_url,
       pdf_titulo,
       orden,
@@ -98,15 +105,26 @@ export const crearLeccion = async (req: Request, res: Response) => {
 
     const leccion = await Leccion.create({
       modulo_id,
-      examen_id: examen_id ?? null, // 👈 guarda FK al examen si viene
+      examen_id: examen_id ?? null,
       titulo,
       descripcion: descripcion ?? null,
+
+      // PDF de contenido principal
+      contenido_pdf_url: contenido_pdf_url ?? null,
+      contenido_pdf_titulo: contenido_pdf_titulo ?? null,
+
+      // video principal
       youtube_id: youtube_id ?? null,
       youtube_titulo: youtube_titulo ?? null,
+
+      // video adicional
       youtube_id_extra: youtube_id_extra ?? null,
       youtube_titulo_extra: youtube_titulo_extra ?? null,
+
+      // PDF de apoyo
       pdf_url: pdf_url ?? null,
       pdf_titulo: pdf_titulo ?? null,
+
       orden: orden ?? 1,
       publicado: !!publicado,
     });
@@ -131,18 +149,30 @@ export const actualizarLeccion = async (req: Request, res: Response) => {
     await leccion.update({
       titulo: req.body.titulo,
       descripcion: req.body.descripcion ?? null,
+
+      // PDF de contenido principal
+      contenido_pdf_url: req.body.contenido_pdf_url ?? null,
+      contenido_pdf_titulo: req.body.contenido_pdf_titulo ?? null,
+
+      // video principal
       youtube_id: req.body.youtube_id ?? null,
       youtube_titulo: req.body.youtube_titulo ?? null,
+
+      // video adicional
       youtube_id_extra: req.body.youtube_id_extra ?? null,
       youtube_titulo_extra: req.body.youtube_titulo_extra ?? null,
+
+      // PDF de apoyo
       pdf_url: req.body.pdf_url ?? null,
       pdf_titulo: req.body.pdf_titulo ?? null,
+
       orden: req.body.orden ?? leccion.orden,
       publicado:
         req.body.publicado !== undefined
           ? req.body.publicado
           : leccion.publicado,
-      // 👇 clave para vincular la prueba creada a la lección
+
+      // vinculación con examen
       examen_id:
         req.body.examen_id !== undefined
           ? req.body.examen_id
@@ -175,16 +205,73 @@ export const eliminarLeccion = async (req: Request, res: Response) => {
 };
 
 /* =========================
- *  USUARIO – PUBLICA
+ *  USUARIO – LECCIÓN + PROGRESO
+ *  GET /api/cursos/leccion/:id
  * ========================= */
 export const obtenerLeccionPublica = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const leccion = await Leccion.findByPk(id);
+
     if (!leccion || leccion.publicado !== true) {
       return res.status(404).json({ error: "Lección no disponible" });
     }
-    return res.json(leccion);
+
+    const leccionJson = leccion.toJSON() as any;
+
+    // Por compatibilidad, la lección se sigue devolviendo "plana",
+    // solo añadimos un campo adicional `progreso`.
+    let progreso: {
+      estado: "bloqueada" | "disponible" | "completada";
+      aprobado: boolean;
+      nota_ultima_prueba: number | null;
+    } | null = null;
+
+    const user = req.user as any;
+    if (user?.id) {
+      const moduloId = Number(leccionJson.modulo_id);
+      const modulo = await Modulo.findByPk(moduloId);
+
+      if (modulo) {
+        const moduloJson = modulo.toJSON() as any;
+        const cursoId = Number(moduloJson.curso_id);
+
+        if (Number.isFinite(cursoId)) {
+          const prog = await ProgresoLeccion.findOne({
+            where: {
+              usuario_id: Number(user.id),
+              curso_id: cursoId,
+              modulo_id: moduloId,
+              leccion_id: Number(id),
+            },
+          });
+
+          if (prog) {
+            const pj = prog.toJSON() as any;
+            progreso = {
+              estado: pj.estado,
+              aprobado: !!pj.aprobado,
+              nota_ultima_prueba:
+                pj.nota_ultima_prueba != null
+                  ? Number(pj.nota_ultima_prueba)
+                  : null,
+            };
+          } else {
+            // Si el usuario puede ver la clase, al menos está disponible.
+            progreso = {
+              estado: "disponible",
+              aprobado: false,
+              nota_ultima_prueba: null,
+            };
+          }
+        }
+      }
+    }
+
+    return res.json({
+      ...leccionJson,
+      progreso,
+    });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Error al obtener la lección" });

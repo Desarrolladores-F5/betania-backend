@@ -19,6 +19,8 @@ import "./models/pregunta.model";
 import "./models/alternativa.model";
 import "./models/intento_examen.model";
 import "./models/respuesta_intento.model";
+import "./models/progreso_modulo.model";
+import "./models/progreso_leccion.model";
 
 // ⬅️ Usaremos el modelo Leccion en los GET de lectura
 import { Leccion } from "./models/leccion.model";
@@ -158,7 +160,8 @@ app.get(
 // ==================================================
 // 🎓 Rutas públicas de usuario final
 // ==================================================
-app.use("/api/cursos", cursosRoutes);
+app.use("/api/cursos", cursosRoutes);      
+app.use("/api/user/cursos", cursosRoutes); 
 app.use("/api/examenes", examenesRoutes);
 
 // ==================================================

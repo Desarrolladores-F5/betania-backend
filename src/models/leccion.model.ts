@@ -32,6 +32,10 @@ export class Leccion extends Model<
   declare titulo: string;
   declare descripcion: string | null;
 
+  // PDF de contenido principal (nuevo)
+  declare contenido_pdf_url: string | null;
+  declare contenido_pdf_titulo: string | null;
+
   // Video principal
   declare youtube_id: string | null;
   declare youtube_titulo: string | null;
@@ -40,7 +44,7 @@ export class Leccion extends Model<
   declare youtube_id_extra: string | null;
   declare youtube_titulo_extra: string | null;
 
-  // PDF principal
+  // PDF principal (material de apoyo)
   declare pdf_url: string | null;
   declare pdf_titulo: string | null;
 
@@ -76,9 +80,21 @@ Leccion.init(
       allowNull: true,
     },
 
+    // ============ PDF CONTENIDO PRINCIPAL (nuevo) ============
+    contenido_pdf_url: {
+      type: DataTypes.STRING(1024),
+      allowNull: true,
+      comment: "PDF con el contenido principal de la clase",
+    },
+    contenido_pdf_titulo: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: "Título visible del PDF de contenido principal",
+    },
+
     // ================= VIDEO PRINCIPAL =================
     youtube_id: {
-      type: DataTypes.STRING(255),   // 👈 AJUSTADO A 255 PARA URL COMPLETA
+      type: DataTypes.STRING(255), // URL o ID
       allowNull: true,
       comment: "URL o ID del video de YouTube asociado (si aplica)",
     },
@@ -90,7 +106,7 @@ Leccion.init(
 
     // ================= VIDEO ADICIONAL =================
     youtube_id_extra: {
-      type: DataTypes.STRING(255),   // 👈 AJUSTADO A 255 PARA URL COMPLETA
+      type: DataTypes.STRING(255),
       allowNull: true,
       comment: "URL o ID de un segundo video de YouTube (opcional)",
     },
@@ -100,16 +116,16 @@ Leccion.init(
       comment: "Título legible del video adicional",
     },
 
-    // ====================== PDF ========================
+    // ====================== PDF APOYO ========================
     pdf_url: {
       type: DataTypes.STRING(1024),
       allowNull: true,
-      comment: "Ruta o URL del material PDF (si aplica)",
+      comment: "Ruta o URL del material PDF de apoyo (si aplica)",
     },
     pdf_titulo: {
       type: DataTypes.STRING(255),
       allowNull: true,
-      comment: "Título legible del PDF principal",
+      comment: "Título legible del PDF principal/de apoyo",
     },
 
     // ================= ORDEN / ESTADO ==================
