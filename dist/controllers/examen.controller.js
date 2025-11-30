@@ -1,0 +1,565 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.responderPruebaLeccion = exports.obtenerPruebaLeccionUsuario = exports.actualizarExamenCompleto = exports.eliminarExamen = exports.obtenerExamenCompleto = exports.actualizarExamen = exports.crearExamen = exports.listarExamenes = void 0;
+const sequelize_1 = require("sequelize");
+const database_1 = __importDefault(require("../config/database"));
+const examen_model_1 = require("../models/examen.model");
+const curso_model_1 = require("../models/curso.model");
+const pregunta_model_1 = require("../models/pregunta.model");
+const alternativa_model_1 = require("../models/alternativa.model");
+const leccion_model_1 = require("../models/leccion.model");
+const modulo_model_1 = require("../models/modulo.model");
+const progreso_leccion_model_1 = require("../models/progreso_leccion.model");
+/* ======================================================
+   📌 Listar todos los exámenes
+   GET /api/admin/examenes
+   ====================================================== */
+const listarExamenes = async (req, res) => {
+    try {
+        const examenes = await examen_model_1.Examen.findAll({
+            include: [
+                {
+                    model: curso_model_1.Curso,
+                    as: "curso",
+                    attributes: ["id", "titulo"],
+                },
+            ],
+            order: [["id", "ASC"]],
+        });
+        return res.json(examenes);
+    }
+    catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: "No se pudo listar los exámenes" });
+    }
+};
+exports.listarExamenes = listarExamenes;
+/* ======================================================
+   📌 Crear examen
+   ====================================================== */
+const crearExamen = async (req, res) => {
+    try {
+        const { curso_id, titulo, tiempo_limite_seg, intento_max, publicado } = req.body;
+        // Validar que el curso exista
+        const curso = await curso_model_1.Curso.findByPk(curso_id);
+        if (!curso) {
+            return res.status(400).json({ error: "curso_id inválido" });
+        }
+        // Ahora permitimos múltiples exámenes por curso.
+        const examen = await examen_model_1.Examen.create({
+            curso_id,
+            titulo,
+            tiempo_limite_seg: tiempo_limite_seg ?? null,
+            intento_max: intento_max ?? null,
+            publicado: !!publicado,
+        });
+        return res.status(201).json(examen);
+    }
+    catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: "No se pudo crear el examen" });
+    }
+};
+exports.crearExamen = crearExamen;
+/* ======================================================
+   📌 Actualizar examen (solo datos generales)
+   PUT /api/admin/examenes/:id
+   ====================================================== */
+const actualizarExamen = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const examen = await examen_model_1.Examen.findByPk(id);
+        if (!examen)
+            return res.status(404).json({ error: "Examen no encontrado" });
+        await examen.update(req.body);
+        return res.json(examen);
+    }
+    catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: "Error al actualizar examen" });
+    }
+};
+exports.actualizarExamen = actualizarExamen;
+/* ======================================================
+   📌 Obtener examen completo (curso + preguntas + alternativas)
+   GET /api/admin/examenes/:id
+   ====================================================== */
+const obtenerExamenCompleto = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const examen = await examen_model_1.Examen.findByPk(id, {
+            include: [
+                {
+                    model: curso_model_1.Curso,
+                    as: "curso",
+                    attributes: ["id", "titulo"],
+                },
+                {
+                    model: pregunta_model_1.Pregunta,
+                    as: "preguntas",
+                    include: [{ model: alternativa_model_1.Alternativa, as: "alternativas" }],
+                },
+            ],
+            order: [
+                [{ model: pregunta_model_1.Pregunta, as: "preguntas" }, "orden", "ASC"],
+                [
+                    { model: pregunta_model_1.Pregunta, as: "preguntas" },
+                    { model: alternativa_model_1.Alternativa, as: "alternativas" },
+                    "id",
+                    "ASC",
+                ],
+            ],
+        });
+        if (!examen)
+            return res.status(404).json({ error: "Examen no encontrado" });
+        return res.json(examen);
+    }
+    catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: "Error al obtener examen" });
+    }
+};
+exports.obtenerExamenCompleto = obtenerExamenCompleto;
+/* ======================================================
+   📌 Eliminar examen
+   ====================================================== */
+const eliminarExamen = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const examen = await examen_model_1.Examen.findByPk(id);
+        if (!examen)
+            return res.status(404).json({ error: "Examen no encontrado" });
+        await examen.destroy();
+        return res.json({ ok: true });
+    }
+    catch (e) {
+        console.error(e);
+        return res.status(500).json({ error: "Error al eliminar examen" });
+    }
+};
+exports.eliminarExamen = eliminarExamen;
+/* ======================================================
+   📌 Actualizar examen COMPLETO
+   (examen + todas las preguntas + alternativas)
+   PUT /api/admin/examenes/:id/full
+   ====================================================== */
+const actualizarExamenCompleto = async (req, res) => {
+    const examenId = Number(req.params.id);
+    if (!Number.isFinite(examenId)) {
+        return res.status(400).json({ error: "ID de examen inválido" });
+    }
+    const { titulo, tiempo_limite_seg, intento_max, publicado, preguntas, } = req.body || {};
+    if (!titulo || !Array.isArray(preguntas) || preguntas.length === 0) {
+        return res.status(400).json({
+            error: "Se requiere al menos título y un arreglo de preguntas para actualizar el examen completo",
+        });
+    }
+    try {
+        const resultado = await database_1.default.transaction(async (t) => {
+            const examen = await examen_model_1.Examen.findByPk(examenId, { transaction: t });
+            if (!examen) {
+                throw new Error("NOT_FOUND");
+            }
+            // 1) Actualizar datos generales del examen
+            const updateData = { titulo };
+            if (tiempo_limite_seg !== undefined)
+                updateData.tiempo_limite_seg = tiempo_limite_seg;
+            if (intento_max !== undefined)
+                updateData.intento_max = intento_max;
+            if (publicado !== undefined)
+                updateData.publicado = !!publicado;
+            await examen.update(updateData, { transaction: t });
+            // 2) Eliminar TODAS las preguntas anteriores
+            await pregunta_model_1.Pregunta.destroy({
+                where: { examen_id: examenId },
+                transaction: t,
+            });
+            // 3) Crear nuevamente preguntas y alternativas
+            for (let i = 0; i < preguntas.length; i++) {
+                const p = preguntas[i];
+                if (!p || !p.enunciado || !Array.isArray(p.alternativas)) {
+                    throw new Error(`Pregunta inválida en posición ${i + 1}: requiere enunciado y alternativas`);
+                }
+                const pregunta = await pregunta_model_1.Pregunta.create({
+                    examen_id: examenId,
+                    enunciado: p.enunciado,
+                    puntaje: p.puntaje !== undefined && p.puntaje !== null ? p.puntaje : 1,
+                    orden: p.orden !== undefined && p.orden !== null ? p.orden : i + 1,
+                }, { transaction: t });
+                for (const alt of p.alternativas) {
+                    if (!alt || !alt.texto)
+                        continue;
+                    await alternativa_model_1.Alternativa.create({
+                        pregunta_id: pregunta.id,
+                        texto: alt.texto,
+                        es_correcta: !!alt.es_correcta,
+                    }, { transaction: t });
+                }
+            }
+            // 4) Recargar examen completo actualizado
+            const actualizado = await examen_model_1.Examen.findByPk(examenId, {
+                include: [
+                    {
+                        model: curso_model_1.Curso,
+                        as: "curso",
+                        attributes: ["id", "titulo"],
+                    },
+                    {
+                        model: pregunta_model_1.Pregunta,
+                        as: "preguntas",
+                        include: [{ model: alternativa_model_1.Alternativa, as: "alternativas" }],
+                    },
+                ],
+                order: [
+                    [{ model: pregunta_model_1.Pregunta, as: "preguntas" }, "orden", "ASC"],
+                    [
+                        { model: pregunta_model_1.Pregunta, as: "preguntas" },
+                        { model: alternativa_model_1.Alternativa, as: "alternativas" },
+                        "id",
+                        "ASC",
+                    ],
+                ],
+                transaction: t,
+            });
+            return actualizado;
+        });
+        if (!resultado) {
+            return res
+                .status(500)
+                .json({ error: "Error inesperado al actualizar el examen" });
+        }
+        return res.json(resultado);
+    }
+    catch (e) {
+        console.error("Error actualizarExamenCompleto:", e);
+        if (e instanceof Error && e.message === "NOT_FOUND") {
+            return res.status(404).json({ error: "Examen no encontrado" });
+        }
+        return res
+            .status(500)
+            .json({ error: "Error al actualizar el examen completo" });
+    }
+};
+exports.actualizarExamenCompleto = actualizarExamenCompleto;
+/* ======================================================
+   📌 Obtener PRUEBA asociada a una lección (ALUMNO)
+   GET /api/cursos/leccion/:id/prueba
+   ====================================================== */
+const obtenerPruebaLeccionUsuario = async (req, res) => {
+    try {
+        const leccionId = Number(req.params.id);
+        if (!Number.isFinite(leccionId)) {
+            return res.status(400).json({ error: "ID de lección inválido" });
+        }
+        // 1) Buscar la lección
+        const leccion = await leccion_model_1.Leccion.findByPk(leccionId);
+        if (!leccion) {
+            return res.status(404).json({ error: "Lección no encontrada" });
+        }
+        const examenId = leccion.examen_id;
+        if (!examenId) {
+            return res
+                .status(404)
+                .json({ error: "La lección no tiene examen asociado" });
+        }
+        // 2) Buscar el examen con sus preguntas + alternativas
+        const examen = await examen_model_1.Examen.findByPk(examenId, {
+            include: [
+                {
+                    model: pregunta_model_1.Pregunta,
+                    as: "preguntas",
+                    include: [{ model: alternativa_model_1.Alternativa, as: "alternativas" }],
+                },
+            ],
+            order: [
+                [{ model: pregunta_model_1.Pregunta, as: "preguntas" }, "orden", "ASC"],
+                [
+                    { model: pregunta_model_1.Pregunta, as: "preguntas" },
+                    { model: alternativa_model_1.Alternativa, as: "alternativas" },
+                    "id",
+                    "ASC",
+                ],
+            ],
+        });
+        if (!examen) {
+            return res.status(404).json({ error: "Examen no encontrado" });
+        }
+        // 3) Opcional: validar que esté publicado
+        if (!examen.publicado) {
+            return res
+                .status(403)
+                .json({ error: "La evaluación aún no está disponible" });
+        }
+        // 4) Devolver datos “limpios” para el alumno
+        const json = examen.toJSON();
+        const respuesta = {
+            id: json.id,
+            titulo: json.titulo,
+            tiempo_limite_seg: json.tiempo_limite_seg ?? null,
+            intento_max: json.intento_max ?? null,
+            preguntas: Array.isArray(json.preguntas)
+                ? json.preguntas.map((p) => ({
+                    id: p.id,
+                    enunciado: p.enunciado,
+                    puntaje: p.puntaje ?? 1,
+                    alternativas: Array.isArray(p.alternativas)
+                        ? p.alternativas.map((a) => ({
+                            id: a.id,
+                            texto: a.texto,
+                            // ⚠️ No enviamos es_correcta al alumno
+                        }))
+                        : [],
+                }))
+                : [],
+        };
+        return res.json(respuesta);
+    }
+    catch (e) {
+        console.error("Error obtenerPruebaLeccionUsuario:", e);
+        return res
+            .status(500)
+            .json({ error: "Error al obtener la prueba de la lección" });
+    }
+};
+exports.obtenerPruebaLeccionUsuario = obtenerPruebaLeccionUsuario;
+/* ======================================================
+   📌 Responder PRUEBA de una lección (ALUMNO)
+   POST /api/cursos/leccion/:id/prueba/responder
+   Body esperado:
+   {
+     respuestas: [
+       { pregunta_id: number, alternativa_id: number },
+       ...
+     ]
+   }
+   ====================================================== */
+const responderPruebaLeccion = async (req, res) => {
+    try {
+        const leccionId = Number(req.params.id);
+        if (!Number.isFinite(leccionId)) {
+            return res.status(400).json({ error: "ID de lección inválido" });
+        }
+        const respuestas = Array.isArray(req.body?.respuestas)
+            ? req.body.respuestas
+            : null;
+        if (!respuestas || respuestas.length === 0) {
+            return res
+                .status(400)
+                .json({ error: "Debe enviar un arreglo de respuestas" });
+        }
+        // Usuario autenticado (requireAuth en el router)
+        const user = req.user;
+        if (!user?.id) {
+            return res.status(401).json({ error: "No autenticado" });
+        }
+        const usuarioId = Number(user.id);
+        // 1) Buscar la lección y su examen asociado
+        const leccion = await leccion_model_1.Leccion.findByPk(leccionId);
+        if (!leccion) {
+            return res.status(404).json({ error: "Lección no encontrada" });
+        }
+        const examenId = leccion.examen_id;
+        if (!examenId) {
+            return res
+                .status(404)
+                .json({ error: "La lección no tiene examen asociado" });
+        }
+        // Necesitamos modulo_id y curso_id para progreso
+        const leccionJson = leccion.toJSON();
+        const moduloId = Number(leccionJson.modulo_id);
+        if (!Number.isFinite(moduloId)) {
+            return res
+                .status(500)
+                .json({ error: "La lección no tiene módulo asociado válido" });
+        }
+        const modulo = await modulo_model_1.Modulo.findByPk(moduloId);
+        if (!modulo) {
+            return res
+                .status(500)
+                .json({ error: "No se encontró el módulo asociado a la lección" });
+        }
+        const moduloJson = modulo.toJSON();
+        const cursoId = Number(moduloJson.curso_id);
+        if (!Number.isFinite(cursoId)) {
+            return res
+                .status(500)
+                .json({ error: "El módulo no tiene curso asociado válido" });
+        }
+        // 2) Cargar examen con preguntas + alternativas
+        const examen = await examen_model_1.Examen.findByPk(examenId, {
+            include: [
+                {
+                    model: pregunta_model_1.Pregunta,
+                    as: "preguntas",
+                    include: [{ model: alternativa_model_1.Alternativa, as: "alternativas" }],
+                },
+            ],
+            order: [
+                [{ model: pregunta_model_1.Pregunta, as: "preguntas" }, "orden", "ASC"],
+                [
+                    { model: pregunta_model_1.Pregunta, as: "preguntas" },
+                    { model: alternativa_model_1.Alternativa, as: "alternativas" },
+                    "id",
+                    "ASC",
+                ],
+            ],
+        });
+        if (!examen) {
+            return res.status(404).json({ error: "Examen no encontrado" });
+        }
+        const preguntas = (examen.toJSON().preguntas ?? []);
+        if (!Array.isArray(preguntas) || preguntas.length === 0) {
+            return res
+                .status(400)
+                .json({ error: "El examen no tiene preguntas configuradas" });
+        }
+        // 3) Construir mapa de alternativas correctas por pregunta
+        const alternativasCorrectas = new Map();
+        for (const p of preguntas) {
+            const pid = Number(p.id);
+            if (!Number.isFinite(pid))
+                continue;
+            const set = new Set();
+            if (Array.isArray(p.alternativas)) {
+                for (const alt of p.alternativas) {
+                    if (alt?.es_correcta) {
+                        const aid = Number(alt.id);
+                        if (Number.isFinite(aid))
+                            set.add(aid);
+                    }
+                }
+            }
+            alternativasCorrectas.set(pid, set);
+        }
+        let correctas = 0;
+        const detalle = [];
+        for (const r of respuestas) {
+            const preguntaId = Number(r.pregunta_id);
+            const alternativaId = Number(r.alternativa_id);
+            if (!Number.isFinite(preguntaId) || !Number.isFinite(alternativaId)) {
+                continue;
+            }
+            const setCorrectas = alternativasCorrectas.get(preguntaId);
+            const esCorrecta = !!setCorrectas && setCorrectas.has(alternativaId);
+            if (esCorrecta)
+                correctas++;
+            detalle.push({
+                pregunta_id: preguntaId,
+                alternativa_id: alternativaId,
+                es_correcta: esCorrecta,
+            });
+        }
+        const totalPreguntas = preguntas.length;
+        const incorrectas = totalPreguntas - correctas;
+        const porcentaje = totalPreguntas > 0
+            ? Math.round((correctas * 100) / totalPreguntas)
+            : 0;
+        // Regla simple de aprobación (puedes cambiarla: 60% por ejemplo)
+        const aprobado = porcentaje >= 60;
+        // 5) Actualizar progreso de la lección actual
+        const ahora = new Date();
+        const [progActual] = await progreso_leccion_model_1.ProgresoLeccion.findOrCreate({
+            where: {
+                usuario_id: usuarioId,
+                curso_id: cursoId,
+                modulo_id: moduloId,
+                leccion_id: leccionId,
+            },
+            defaults: {
+                estado: "disponible",
+                nota_ultima_prueba: null,
+                aprobado: false,
+                fecha_completado: null,
+            },
+        });
+        let nuevoEstado = progActual.estado;
+        let fechaCompletado = progActual.fecha_completado;
+        if (aprobado) {
+            nuevoEstado = "completada";
+            fechaCompletado = ahora;
+        }
+        else {
+            // Si aún estaba bloqueada, la dejamos al menos disponible para reintentar
+            if (progActual.estado === "bloqueada") {
+                nuevoEstado = "disponible";
+            }
+            else {
+                nuevoEstado = progActual.estado;
+            }
+        }
+        await progActual.update({
+            estado: nuevoEstado,
+            aprobado,
+            nota_ultima_prueba: porcentaje,
+            fecha_completado: fechaCompletado,
+        });
+        // 6) Si aprobó, desbloquear la siguiente lección del mismo módulo
+        let siguienteLeccionId = null;
+        if (aprobado) {
+            // Necesitamos conocer el orden de la lección actual
+            const ordenActual = Number(leccionJson.orden);
+            const leccionSiguiente = await leccion_model_1.Leccion.findOne({
+                where: {
+                    modulo_id: moduloId,
+                    orden: { [sequelize_1.Op.gt]: ordenActual },
+                    publicado: true,
+                },
+                order: [
+                    ["orden", "ASC"],
+                    ["id", "ASC"],
+                ],
+            });
+            if (leccionSiguiente) {
+                siguienteLeccionId = Number(leccionSiguiente.id);
+                const [progSiguiente, creado] = await progreso_leccion_model_1.ProgresoLeccion.findOrCreate({
+                    where: {
+                        usuario_id: usuarioId,
+                        curso_id: cursoId,
+                        modulo_id: moduloId,
+                        leccion_id: siguienteLeccionId,
+                    },
+                    defaults: {
+                        estado: "disponible",
+                        aprobado: false,
+                        nota_ultima_prueba: null,
+                        fecha_completado: null,
+                    },
+                });
+                if (!creado && progSiguiente.estado === "bloqueada") {
+                    await progSiguiente.update({
+                        estado: "disponible",
+                        aprobado: false,
+                    });
+                }
+            }
+        }
+        // 7) Respuesta al frontend
+        return res.json({
+            leccion_id: leccionId,
+            examen_id: examenId,
+            total_preguntas: totalPreguntas,
+            correctas,
+            incorrectas,
+            porcentaje,
+            aprobado,
+            detalle,
+            progreso: {
+                estado_leccion: nuevoEstado,
+                nota_ultima_prueba: porcentaje,
+            },
+            siguiente_leccion: siguienteLeccionId
+                ? { id: siguienteLeccionId, desbloqueada: true }
+                : null,
+        });
+    }
+    catch (e) {
+        console.error("Error responderPruebaLeccion:", e);
+        return res
+            .status(500)
+            .json({ error: "Error al procesar la respuesta de la prueba" });
+    }
+};
+exports.responderPruebaLeccion = responderPruebaLeccion;
