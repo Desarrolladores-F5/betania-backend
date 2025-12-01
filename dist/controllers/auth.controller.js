@@ -31,7 +31,6 @@ async function login(req, res) {
             include: [{ model: rol_model_1.Rol, as: "rol", attributes: ["id", "nombre"] }],
         }));
         if (!user || !user.password_hash) {
-            // usuario inexistente o seed sin hash: detener aquí
             console.error("Login: usuario inexistente o password_hash ausente:", email);
             return res.status(401).json({ error: "Credenciales inválidas" });
         }
@@ -40,15 +39,22 @@ async function login(req, res) {
         if (!valid) {
             return res.status(401).json({ error: "Credenciales inválidas" });
         }
-        // Normalizar rol
         const rolNormalizado = normalizarRol(user.rol?.nombre);
-        // Firmar JWT
-        const secret = process.env.JWT_SECRET;
-        if (!secret) {
+        // ============================
+        //   Firma de JWT tipada
+        // ============================
+        const envSecret = process.env.JWT_SECRET;
+        if (!envSecret) {
             console.error("❌ JWT_SECRET no está definido en variables de entorno");
             return res.status(500).json({ error: "Configuración del servidor no válida" });
         }
-        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, rol: rolNormalizado }, secret, { expiresIn: "1d", algorithm: "HS256" });
+        const secret = envSecret;
+        const jwtOptions = {
+            // cast a any para evitar la queja de tipos estrictos con process.env
+            expiresIn: (process.env.JWT_EXPIRES ?? "1d"),
+            algorithm: "HS256",
+        };
+        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, rol: rolNormalizado }, secret, jwtOptions);
         const isProd = process.env.NODE_ENV === "production";
         // Cookie JWT (HttpOnly)
         res.cookie("token", token, {

@@ -1,6 +1,7 @@
 // src/controllers/auth.controller.ts
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import type { SignOptions, Secret } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Usuario } from "../models/usuario.model";
 import { Rol } from "../models/rol.model";
@@ -33,7 +34,6 @@ export async function login(req: Request, res: Response) {
     })) as UsuarioConRol | null;
 
     if (!user || !user.password_hash) {
-      // usuario inexistente o seed sin hash: detener aquí
       console.error("Login: usuario inexistente o password_hash ausente:", email);
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
@@ -44,20 +44,29 @@ export async function login(req: Request, res: Response) {
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
 
-    // Normalizar rol
     const rolNormalizado = normalizarRol(user.rol?.nombre);
 
-    // Firmar JWT
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
+    // ============================
+    //   Firma de JWT tipada
+    // ============================
+    const envSecret = process.env.JWT_SECRET;
+    if (!envSecret) {
       console.error("❌ JWT_SECRET no está definido en variables de entorno");
       return res.status(500).json({ error: "Configuración del servidor no válida" });
     }
 
+    const secret: Secret = envSecret;
+
+    const jwtOptions: SignOptions = {
+      // cast a any para evitar la queja de tipos estrictos con process.env
+      expiresIn: (process.env.JWT_EXPIRES ?? "1d") as any,
+      algorithm: "HS256",
+    };
+
     const token = jwt.sign(
       { id: user.id, email: user.email, rol: rolNormalizado },
       secret,
-      { expiresIn: "1d", algorithm: "HS256" }
+      jwtOptions
     );
 
     const isProd = process.env.NODE_ENV === "production";
