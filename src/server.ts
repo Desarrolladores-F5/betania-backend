@@ -22,7 +22,7 @@ import "./models/respuesta_intento.model";
 import "./models/progreso_modulo.model";
 import "./models/progreso_leccion.model";
 
-// ⬅️ Usaremos el modelo Leccion en los GET de lectura
+// Usaremos el modelo Leccion en los GET de lectura
 import { Leccion } from "./models/leccion.model";
 
 import { initData } from "./utils/initData";
@@ -74,9 +74,8 @@ const corsOptions: CorsOptions = {
   credentials: true,
 };
 
+// Middleware global de CORS
 app.use(cors(corsOptions));
-// Soporte para preflight OPTIONS en todas las rutas
-app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
@@ -144,8 +143,9 @@ app.get(
     try {
       const { id } = req.params;
       const item = await Leccion.findByPk(id);
-      if (!item)
+      if (!item) {
         return res.status(404).json({ error: "Lección no encontrada" });
+      }
       return res.json(item);
     } catch (e) {
       console.error(e);
