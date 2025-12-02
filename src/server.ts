@@ -1,6 +1,6 @@
 // src/server.ts
 import express from "express";
-import cors from "cors";
+import cors, { CorsOptions } from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
@@ -54,12 +54,29 @@ app.use(
   })
 );
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    credentials: true, // Permite cookies entre dominios
-  })
-);
+// --------------------------------------------------
+// ⚙️ CORS: local + producción en Railway
+// --------------------------------------------------
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://frontend-betania-production.up.railway.app",
+];
+
+const corsOptions: CorsOptions = {
+  origin(origin, callback) {
+    // Permitir también llamadas sin origin (Postman, curl, etc.)
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn("Origen no permitido por CORS:", origin);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+// Soporte para preflight OPTIONS en todas las rutas
+app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
@@ -108,11 +125,12 @@ app.get(
       const { modulo_id } = req.query as { modulo_id?: string };
       const where = modulo_id ? { modulo_id: Number(modulo_id) } : undefined;
       const filas = await Leccion.findAll({ where });
-      // Devolvemos arreglo plano para que tu normalizador lo acepte
       return res.json(filas);
     } catch (e) {
       console.error(e);
-      return res.status(500).json({ error: "No fue posible listar las lecciones" });
+      return res
+        .status(500)
+        .json({ error: "No fue posible listar las lecciones" });
     }
   }
 );
@@ -126,16 +144,19 @@ app.get(
     try {
       const { id } = req.params;
       const item = await Leccion.findByPk(id);
-      if (!item) return res.status(404).json({ error: "Lección no encontrada" });
+      if (!item)
+        return res.status(404).json({ error: "Lección no encontrada" });
       return res.json(item);
     } catch (e) {
       console.error(e);
-      return res.status(500).json({ error: "No fue posible obtener la lección" });
+      return res
+        .status(500)
+        .json({ error: "No fue posible obtener la lección" });
     }
   }
 );
 
-// GET /api/admin/modulos/:moduloId/lecciones  ← ruta anidada que usa tu UI
+// GET /api/admin/modulos/:moduloId/lecciones
 app.get(
   "/api/admin/modulos/:moduloId/lecciones",
   requireAuth,
@@ -145,14 +166,18 @@ app.get(
       const { moduloId } = req.params;
       const lecciones = await Leccion.findAll({
         where: { modulo_id: Number(moduloId) },
-        order: [["orden", "ASC"], ["id", "ASC"]],
+        order: [
+          ["orden", "ASC"],
+          ["id", "ASC"],
+        ],
       });
 
-      // Estructura amigable (tu frontend soporta { lecciones: [...] } y lista plana)
       return res.json({ moduloId: Number(moduloId), lecciones });
     } catch (e) {
       console.error(e);
-      return res.status(500).json({ error: "No fue posible obtener las lecciones del módulo" });
+      return res.status(500).json({
+        error: "No fue posible obtener las lecciones del módulo",
+      });
     }
   }
 );
@@ -160,8 +185,8 @@ app.get(
 // ==================================================
 // 🎓 Rutas públicas de usuario final
 // ==================================================
-app.use("/api/cursos", cursosRoutes);      
-app.use("/api/user/cursos", cursosRoutes); 
+app.use("/api/cursos", cursosRoutes);
+app.use("/api/user/cursos", cursosRoutes);
 app.use("/api/examenes", examenesRoutes);
 
 // ==================================================
@@ -177,10 +202,7 @@ const PORT = Number(process.env.PORT || 3001);
 async function start() {
   try {
     await sequelize.authenticate();
-
-    // Evita recrear índices/llaves (previene ER_TOO_MANY_KEYS)
     await sequelize.sync();
-
     await initData();
 
     app.listen(PORT, () => {

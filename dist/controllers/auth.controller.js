@@ -41,20 +41,25 @@ async function login(req, res) {
         }
         const rolNormalizado = normalizarRol(user.rol?.nombre);
         // ============================
-        //   Firma de JWT tipada
+        //   Firma de JWT (forzando any)
         // ============================
-        const envSecret = process.env.JWT_SECRET;
-        if (!envSecret) {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
             console.error("❌ JWT_SECRET no está definido en variables de entorno");
             return res.status(500).json({ error: "Configuración del servidor no válida" });
         }
-        const secret = envSecret;
-        const jwtOptions = {
-            // cast a any para evitar la queja de tipos estrictos con process.env
-            expiresIn: (process.env.JWT_EXPIRES ?? "1d"),
+        const payload = {
+            id: user.id,
+            email: user.email,
+            rol: rolNormalizado,
+        };
+        const options = {
+            expiresIn: process.env.JWT_EXPIRES ?? "1d",
             algorithm: "HS256",
         };
-        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, rol: rolNormalizado }, secret, jwtOptions);
+        // 👉 Cast a any para saltar el problema de sobrecargas de tipos en Railway
+        const signJwt = jsonwebtoken_1.default.sign;
+        const token = signJwt(payload, secret, options);
         const isProd = process.env.NODE_ENV === "production";
         // Cookie JWT (HttpOnly)
         res.cookie("token", token, {
