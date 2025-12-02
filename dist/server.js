@@ -25,7 +25,7 @@ require("./models/intento_examen.model");
 require("./models/respuesta_intento.model");
 require("./models/progreso_modulo.model");
 require("./models/progreso_leccion.model");
-// ⬅️ Usaremos el modelo Leccion en los GET de lectura
+// Usaremos el modelo Leccion en los GET de lectura
 const leccion_model_1 = require("./models/leccion.model");
 const initData_1 = require("./utils/initData");
 const auth_1 = require("./middlewares/auth");
@@ -49,10 +49,26 @@ const app = (0, express_1.default)();
 app.use((0, helmet_1.default)({
     crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
-app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    credentials: true, // Permite cookies entre dominios
-}));
+// --------------------------------------------------
+// ⚙️ CORS: local + producción en Railway
+// --------------------------------------------------
+const allowedOrigins = [
+    "http://localhost:3000",
+    "https://frontend-betania-production.up.railway.app",
+];
+const corsOptions = {
+    origin(origin, callback) {
+        // Permitir también llamadas sin origin (Postman, curl, etc.)
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        console.warn("Origen no permitido por CORS:", origin);
+        return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+};
+// Middleware global de CORS
+app.use((0, cors_1.default)(corsOptions));
 app.use(express_1.default.json({ limit: "10mb" }));
 app.use((0, cookie_parser_1.default)());
 app.use((0, morgan_1.default)("dev"));
@@ -90,12 +106,13 @@ app.get("/api/admin/lecciones", auth_1.requireAuth, auth_1.requireAdmin, async (
         const { modulo_id } = req.query;
         const where = modulo_id ? { modulo_id: Number(modulo_id) } : undefined;
         const filas = await leccion_model_1.Leccion.findAll({ where });
-        // Devolvemos arreglo plano para que tu normalizador lo acepte
         return res.json(filas);
     }
     catch (e) {
         console.error(e);
-        return res.status(500).json({ error: "No fue posible listar las lecciones" });
+        return res
+            .status(500)
+            .json({ error: "No fue posible listar las lecciones" });
     }
 });
 // GET /api/admin/lecciones/:id
@@ -103,29 +120,36 @@ app.get("/api/admin/lecciones/:id", auth_1.requireAuth, auth_1.requireAdmin, asy
     try {
         const { id } = req.params;
         const item = await leccion_model_1.Leccion.findByPk(id);
-        if (!item)
+        if (!item) {
             return res.status(404).json({ error: "Lección no encontrada" });
+        }
         return res.json(item);
     }
     catch (e) {
         console.error(e);
-        return res.status(500).json({ error: "No fue posible obtener la lección" });
+        return res
+            .status(500)
+            .json({ error: "No fue posible obtener la lección" });
     }
 });
-// GET /api/admin/modulos/:moduloId/lecciones  ← ruta anidada que usa tu UI
+// GET /api/admin/modulos/:moduloId/lecciones
 app.get("/api/admin/modulos/:moduloId/lecciones", auth_1.requireAuth, auth_1.requireAdmin, async (req, res) => {
     try {
         const { moduloId } = req.params;
         const lecciones = await leccion_model_1.Leccion.findAll({
             where: { modulo_id: Number(moduloId) },
-            order: [["orden", "ASC"], ["id", "ASC"]],
+            order: [
+                ["orden", "ASC"],
+                ["id", "ASC"],
+            ],
         });
-        // Estructura amigable (tu frontend soporta { lecciones: [...] } y lista plana)
         return res.json({ moduloId: Number(moduloId), lecciones });
     }
     catch (e) {
         console.error(e);
-        return res.status(500).json({ error: "No fue posible obtener las lecciones del módulo" });
+        return res.status(500).json({
+            error: "No fue posible obtener las lecciones del módulo",
+        });
     }
 });
 // ==================================================
@@ -145,7 +169,6 @@ const PORT = Number(process.env.PORT || 3001);
 async function start() {
     try {
         await database_1.default.authenticate();
-        // Evita recrear índices/llaves (previene ER_TOO_MANY_KEYS)
         await database_1.default.sync();
         await (0, initData_1.initData)();
         app.listen(PORT, () => {
