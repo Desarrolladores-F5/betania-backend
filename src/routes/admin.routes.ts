@@ -1,6 +1,8 @@
+//src/routes/admin.routes.ts
 import { Router, Request, Response } from "express";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import adminUsuariosRouter from "./admin.usuarios.routes";
+import adminReportesRouter from "./admin.reportes.routes";
 
 const router = Router();
 
@@ -14,15 +16,19 @@ router.get("/ping", (_req, res) => {
 
 // Dashboard de admin
 router.get("/dashboard", (req: Request, res: Response) => {
-  // Aquí puedes devolver datos que necesites en el dashboard
   res.json({
     message: "Dashboard admin accesible",
-    user: req.user, // info del admin logueado
+    user: req.user,
     ts: new Date().toISOString(),
   });
 });
 
-// CRUD de usuarios administrado
+// -----------------------------
+// Rutas admin
+// -----------------------------
 router.use("/usuarios", adminUsuariosRouter);
+
+// ✅ ESTA LÍNEA ES LA CLAVE
+router.use("/reportes", adminReportesRouter);
 
 export default router;

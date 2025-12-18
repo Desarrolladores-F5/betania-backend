@@ -22,13 +22,13 @@ import "./models/respuesta_intento.model";
 import "./models/progreso_modulo.model";
 import "./models/progreso_leccion.model";
 
-// Usaremos el modelo Leccion en los GET de lectura
+// Usaremos el modelo Leccion en algunos GET
 import { Leccion } from "./models/leccion.model";
 
 import { initData } from "./utils/initData";
 import { requireAuth, requireAdmin } from "./middlewares/auth";
 
-// Rutas existentes
+// Rutas
 import authRoutes from "./routes/auth.routes";
 import adminRoutes from "./routes/admin.routes";
 import adminUsuariosRoutes from "./routes/admin.usuarios.routes";
@@ -40,13 +40,15 @@ import adminExamenesRoutes from "./routes/admin.examenes.routes";
 import adminReportesRoutes from "./routes/admin.reportes.routes";
 import cursosRoutes from "./routes/cursos.routes";
 import examenesRoutes from "./routes/examenes.routes";
+import userRoutes from "./routes/user.routes";
+import adminMailRoutes from "./routes/admin.mail.routes";
 
 dotenv.config();
 
 const app = express();
 
 // ==================================================
-// 🛡️ Seguridad global y middlewares base
+// 🛡️ Seguridad global
 // ==================================================
 app.use(
   helmet({
@@ -54,9 +56,9 @@ app.use(
   })
 );
 
-// --------------------------------------------------
-// ⚙️ CORS: local + producción en Railway
-// --------------------------------------------------
+// ==================================================
+// ⚙️ CORS
+// ==================================================
 const allowedOrigins = [
   "http://localhost:3000",
   "https://frontend-betania-production.up.railway.app",
@@ -64,7 +66,6 @@ const allowedOrigins = [
 
 const corsOptions: CorsOptions = {
   origin(origin, callback) {
-    // Permitir también llamadas sin origin (Postman, curl, etc.)
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
@@ -74,9 +75,7 @@ const corsOptions: CorsOptions = {
   credentials: true,
 };
 
-// Middleware global de CORS
 app.use(cors(corsOptions));
-
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 app.use(morgan("dev"));
@@ -97,94 +96,77 @@ app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/auth", authRoutes);
 
 // ==================================================
-// 🔐 Rutas protegidas (Admin base + subrutas existentes)
+// 🔐 Rutas ADMIN (protección global)
 // ==================================================
 app.use("/api/admin", requireAuth, requireAdmin);
+
+// Core admin
 app.use("/api/admin", adminRoutes);
+
+// Submódulos admin
 app.use("/api/admin/usuarios", adminUsuariosRoutes);
 app.use("/api/admin/cursos", adminCursosRoutes);
 app.use("/api/admin/modulos", adminModulosRoutes);
 app.use("/api/admin/lecciones", adminLeccionesRoutes);
 app.use("/api/admin/uploads", adminUploadsRoutes);
 app.use("/api/admin/examenes", adminExamenesRoutes);
-app.use("/api/admin", adminReportesRoutes);
-
-/* ==================================================
-   ✅ ENDPOINTS DE LECTURA PARA LECCIONES
-   (compatibles con tu frontend actual)
-   ================================================== */
-
-// GET /api/admin/lecciones?modulo_id=4
-app.get(
-  "/api/admin/lecciones",
-  requireAuth,
-  requireAdmin,
-  async (req, res) => {
-    try {
-      const { modulo_id } = req.query as { modulo_id?: string };
-      const where = modulo_id ? { modulo_id: Number(modulo_id) } : undefined;
-      const filas = await Leccion.findAll({ where });
-      return res.json(filas);
-    } catch (e) {
-      console.error(e);
-      return res
-        .status(500)
-        .json({ error: "No fue posible listar las lecciones" });
-    }
-  }
-);
-
-// GET /api/admin/lecciones/:id
-app.get(
-  "/api/admin/lecciones/:id",
-  requireAuth,
-  requireAdmin,
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const item = await Leccion.findByPk(id);
-      if (!item) {
-        return res.status(404).json({ error: "Lección no encontrada" });
-      }
-      return res.json(item);
-    } catch (e) {
-      console.error(e);
-      return res
-        .status(500)
-        .json({ error: "No fue posible obtener la lección" });
-    }
-  }
-);
-
-// GET /api/admin/modulos/:moduloId/lecciones
-app.get(
-  "/api/admin/modulos/:moduloId/lecciones",
-  requireAuth,
-  requireAdmin,
-  async (req, res) => {
-    try {
-      const { moduloId } = req.params;
-      const lecciones = await Leccion.findAll({
-        where: { modulo_id: Number(moduloId) },
-        order: [
-          ["orden", "ASC"],
-          ["id", "ASC"],
-        ],
-      });
-
-      return res.json({ moduloId: Number(moduloId), lecciones });
-    } catch (e) {
-      console.error(e);
-      return res.status(500).json({
-        error: "No fue posible obtener las lecciones del módulo",
-      });
-    }
-  }
-);
+app.use("/api/admin/reportes", adminReportesRoutes);
+app.use("/api/admin/mail", adminMailRoutes);
 
 // ==================================================
-// 🎓 Rutas públicas de usuario final
+// 📘 Endpoints auxiliares de lectura (compatibilidad)
 // ==================================================
+app.get("/api/admin/lecciones", async (req, res) => {
+  try {
+    const { modulo_id } = req.query as { modulo_id?: string };
+    const where = modulo_id ? { modulo_id: Number(modulo_id) } : undefined;
+    const filas = await Leccion.findAll({ where });
+    return res.json(filas);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "No fue posible listar las lecciones" });
+  }
+});
+
+app.get("/api/admin/lecciones/:id", async (req, res) => {
+  try {
+    const item = await Leccion.findByPk(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: "Lección no encontrada" });
+    }
+    return res.json(item);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "No fue posible obtener la lección" });
+  }
+});
+
+app.get("/api/admin/modulos/:moduloId/lecciones", async (req, res) => {
+  try {
+    const lecciones = await Leccion.findAll({
+      where: { modulo_id: Number(req.params.moduloId) },
+      order: [
+        ["orden", "ASC"],
+        ["id", "ASC"],
+      ],
+    });
+
+    return res.json({
+      moduloId: Number(req.params.moduloId),
+      lecciones,
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({
+      error: "No fue posible obtener las lecciones del módulo",
+    });
+  }
+});
+
+// ==================================================
+// 🎓 Rutas USUARIO
+// ==================================================
+app.use("/api/user", userRoutes);
 app.use("/api/cursos", cursosRoutes);
 app.use("/api/user/cursos", cursosRoutes);
 app.use("/api/examenes", examenesRoutes);
@@ -195,7 +177,7 @@ app.use("/api/examenes", examenesRoutes);
 app.use((_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
 
 // ==================================================
-// 🚀 Inicialización del servidor
+// 🚀 Inicio servidor
 // ==================================================
 const PORT = Number(process.env.PORT || 3001);
 
