@@ -1,6 +1,6 @@
 // src/controllers/auth.controller.ts
 import { Request, Response } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Usuario } from "../models/usuario.model";
 import { Rol } from "../models/rol.model";
@@ -46,7 +46,7 @@ export async function login(req: Request, res: Response) {
     const rolNormalizado = normalizarRol(user.rol?.nombre);
 
     // ============================
-    //   Firma de JWT (forzando any)
+    //   Firma de JWT (tipada)
     // ============================
     const secret = process.env.JWT_SECRET;
     if (!secret) {
@@ -60,23 +60,21 @@ export async function login(req: Request, res: Response) {
       rol: rolNormalizado,
     };
 
-    const options = {
-      expiresIn: process.env.JWT_EXPIRES ?? "1d",
+    const options: SignOptions = {
+      expiresIn: (process.env.JWT_EXPIRES ?? "1d") as SignOptions["expiresIn"],
       algorithm: "HS256",
     };
 
-    // 👉 Cast a any para saltar el problema de sobrecargas de tipos en Railway
-    const signJwt = (jwt.sign as any);
-    const token: string = signJwt(payload, secret, options);
+    const token = jwt.sign(payload, secret as Secret, options);
 
     const isProd = process.env.NODE_ENV === "production";
 
     // Cookie JWT (HttpOnly)
     res.cookie("token", token, {
       httpOnly: true,
-      secure: isProd,                    // HTTPS en prod
-      sameSite: isProd ? "none" : "lax", // cross-site en prod
-      maxAge: 24 * 60 * 60 * 1000,       // 1 día
+      secure: isProd,                     // HTTPS en prod
+      sameSite: isProd ? "none" : "lax",  // cross-site en prod
+      maxAge: 24 * 60 * 60 * 1000,        // 1 día
       path: "/",
     });
 
