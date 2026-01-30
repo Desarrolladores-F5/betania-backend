@@ -5,27 +5,37 @@ import bcrypt from "bcryptjs";
 import { Usuario } from "../models/usuario.model";
 import { Rol } from "../models/rol.model";
 
-// Tipo extendido con relación al rol (para el resultado de Sequelize)
+// ===============================
+// Tipos auxiliares
+// ===============================
 type UsuarioConRol = Usuario & {
   rol?: { id: number; nombre: string };
 };
 
-function normalizarRol(nombre?: string | null): "admin" | "supervisor" | "user" {
+function normalizarRol(
+  nombre?: string | null
+): "admin" | "supervisor" | "user" {
   const r = String(nombre ?? "").toLowerCase();
   if (r === "admin") return "admin";
   if (r === "supervisor") return "supervisor";
-  return "user"; // "usuario", "user" u otros => "user"
+  return "user";
 }
 
+// ===============================
+// LOGIN (Bearer token)
+// ===============================
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body as { email: string; password: string };
+    const { email, password } = req.body as {
+      email: string;
+      password: string;
+    };
 
     if (!email || !password) {
       return res.status(400).json({ error: "Faltan credenciales" });
     }
 
-    // Ignora el defaultScope y TRAE explícitamente password_hash para poder comparar
+    // Buscar usuario (trayendo password_hash explícitamente)
     const user = (await Usuario.unscoped().findOne({
       where: { email, activo: true },
       attributes: ["id", "email", "nombres", "password_hash", "rol_id"],
@@ -33,25 +43,26 @@ export async function login(req: Request, res: Response) {
     })) as UsuarioConRol | null;
 
     if (!user || !user.password_hash) {
-      console.error("Login: usuario inexistente o password_hash ausente:", email);
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
 
-    // Comparación segura
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
+    // Validar password
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) {
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
 
     const rolNormalizado = normalizarRol(user.rol?.nombre);
 
-    // ============================
-    //   Firma de JWT (tipada)
-    // ============================
+    // ===============================
+    // JWT
+    // ===============================
     const secret = process.env.JWT_SECRET;
     if (!secret) {
-      console.error("❌ JWT_SECRET no está definido en variables de entorno");
-      return res.status(500).json({ error: "Configuración del servidor no válida" });
+      console.error("❌ JWT_SECRET no definido");
+      return res
+        .status(500)
+        .json({ error: "Configuración del servidor inválida" });
     }
 
     const payload = {
@@ -60,49 +71,49 @@ export async function login(req: Request, res: Response) {
       rol: rolNormalizado,
     };
 
+    // FIX TS2322 (jsonwebtoken)
+    const expiresEnv = process.env.JWT_EXPIRES;
+
+    const expiresIn: SignOptions["expiresIn"] =
+      typeof expiresEnv === "string" && expiresEnv.trim() !== ""
+        ? (expiresEnv as SignOptions["expiresIn"])
+        : "1d";
+
     const options: SignOptions = {
-      expiresIn: (process.env.JWT_EXPIRES ?? "1d") as SignOptions["expiresIn"],
+      expiresIn,
       algorithm: "HS256",
     };
 
     const token = jwt.sign(payload, secret as Secret, options);
 
-    const isProd = process.env.NODE_ENV === "production";
+    console.log(`LOGIN OK: userId=${user.id} rol=${rolNormalizado}`);
 
-    // Cookie JWT (HttpOnly)
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: isProd,                     // HTTPS en prod
-      sameSite: isProd ? "none" : "lax",  // cross-site en prod
-      maxAge: 24 * 60 * 60 * 1000,        // 1 día
-      path: "/",
-    });
-
-    console.log(`LOGIN OK: userId=${user.id} rol=${rolNormalizado} secure=${isProd}`);
-
-    // Respuesta pública mínima
+    // ✅ IMPORTANTE: devolver token para Authorization: Bearer
     return res.status(200).json({
+      token,
       user: {
         id: user.id,
         email: user.email,
-        nombres: user.nombres || "",
+        nombres: user.nombres ?? "",
         rol: rolNormalizado,
+        rol_id: user.rol_id ?? null,
       },
     });
-  } catch (err) {
-    console.error("Error en login:", err);
+  } catch (error) {
+    console.error("Error en login:", error);
     return res.status(500).json({ error: "Error interno en login" });
   }
 }
 
+// ===============================
+// ME (protegido con requireAuth Bearer)
+// ===============================
 export async function me(req: Request, res: Response) {
   try {
-    // req.user viene desde requireAuth (contiene al menos { id, rol })
     if (!req.user?.id) {
       return res.status(401).json({ error: "No autenticado" });
     }
 
-    // Enriquecer con datos actuales desde BD
     const user = await Usuario.findByPk(req.user.id, {
       attributes: ["id", "email", "nombres", "rol_id", "activo"],
       include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
@@ -123,25 +134,22 @@ export async function me(req: Request, res: Response) {
         rol_id: user.rol_id ?? null,
       },
     });
-  } catch (err) {
-    console.error("Error en /api/auth/me:", err);
+  } catch (error) {
+    console.error("Error en /me:", error);
     return res.status(500).json({ error: "Error interno en /me" });
   }
 }
 
+// ===============================
+// LOGOUT (Bearer token)
+// ===============================
+// En Bearer token, el “logout” real se hace en el frontend borrando el token.
+// Este endpoint solo responde OK para mantener la interfaz.
 export async function logout(req: Request, res: Response) {
   try {
-    const isProd = process.env.NODE_ENV === "production";
-    res.cookie("token", "", {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      expires: new Date(0), // expira inmediatamente
-      path: "/",
-    });
     return res.status(200).json({ message: "Sesión cerrada correctamente" });
-  } catch (err) {
-    console.error("Error en logout:", err);
+  } catch (error) {
+    console.error("Error en logout:", error);
     return res.status(500).json({ error: "Error interno en logout" });
   }
 }
