@@ -6,8 +6,8 @@ dotenv.config();
 
 let sequelize: Sequelize;
 
-// 👉 CASO 1: Railway (producción)
-if (process.env.MYSQL_PUBLIC_URL) {
+// 👉 PRODUCCIÓN (Railway)
+if (process.env.NODE_ENV === "production") {
   console.log("🌐 Conectando a Railway MySQL...");
 
   sequelize = new Sequelize(process.env.MYSQL_PUBLIC_URL as string, {
@@ -21,7 +21,7 @@ if (process.env.MYSQL_PUBLIC_URL) {
     },
   });
 
-// 👉 CASO 2: Local
+// 👉 LOCAL
 } else {
   console.log("💻 Conectando a MySQL local...");
 
@@ -42,17 +42,6 @@ if (process.env.MYSQL_PUBLIC_URL) {
     host: DB_HOST,
     port: Number(DB_PORT),
     logging: false,
-    pool: {
-      max: 10,
-      min: 0,
-      acquire: 20000,
-      idle: 10000,
-    },
-    define: {
-      underscored: true,
-      timestamps: true,
-      freezeTableName: true,
-    },
   });
 }
 
