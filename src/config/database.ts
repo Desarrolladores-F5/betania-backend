@@ -6,11 +6,11 @@ dotenv.config();
 
 let sequelize: Sequelize;
 
-// 👉 PRODUCCIÓN (Railway)
-if (process.env.NODE_ENV === "production") {
+// 👉 SI existe MYSQL_PUBLIC_URL → Railway
+if (process.env.MYSQL_PUBLIC_URL) {
   console.log("🌐 Conectando a Railway MySQL...");
 
-  sequelize = new Sequelize(process.env.MYSQL_PUBLIC_URL as string, {
+  sequelize = new Sequelize(process.env.MYSQL_PUBLIC_URL, {
     dialect: "mysql",
     logging: false,
     dialectOptions: {
@@ -21,7 +21,7 @@ if (process.env.NODE_ENV === "production") {
     },
   });
 
-// 👉 LOCAL
+// 👉 SI NO → Local
 } else {
   console.log("💻 Conectando a MySQL local...");
 
