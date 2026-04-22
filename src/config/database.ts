@@ -7,10 +7,10 @@ dotenv.config();
 let sequelize: Sequelize;
 
 // 👉 CASO 1: Railway (producción)
-if (process.env.MYSQL_URL) {
+if (process.env.MYSQL_PUBLIC_URL) {
   console.log("🌐 Conectando a Railway MySQL...");
 
-  sequelize = new Sequelize(process.env.MYSQL_URL, {
+  sequelize = new Sequelize(process.env.MYSQL_PUBLIC_URL as string, {
     dialect: "mysql",
     logging: false,
     dialectOptions: {
