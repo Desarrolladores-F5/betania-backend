@@ -35,10 +35,25 @@ function makeFilename(original: string, fallback: string) {
   return `${base || fallback}-${unique}${ext}`;
 }
 
-/** Construye URL absoluta pública a partir de un subpath (e.g. /uploads/...) */
+/** 
+ * 🔥 Construye URL pública correcta (SOLUCIÓN AL PROBLEMA)
+ * - En producción usa BASE_URL (Railway)
+ * - En local usa req.protocol + host
+ */
 export function publicUrl(req: Request, subpath: string) {
-  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-  const host  = req.get("host");
+  // ✅ PRODUCCIÓN (Railway)
+  if (process.env.BASE_URL) {
+    return `${process.env.BASE_URL.replace(/\/$/, "")}${subpath}`;
+  }
+
+  // ✅ LOCAL
+  const proto =
+    (req.headers["x-forwarded-proto"] as string) ||
+    req.protocol ||
+    "http";
+
+  const host = req.get("host");
+
   return `${proto}://${host}${subpath}`;
 }
 
