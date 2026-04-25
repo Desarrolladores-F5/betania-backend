@@ -4,13 +4,21 @@ import { Usuario } from "../models/usuario.model";
 
 export async function initData() {
   // Roles por defecto
+
   const [adminRol] = await Rol.findOrCreate({
     where: { nombre: "admin" },
-    defaults: { nombre: "admin" }
+    defaults: { nombre: "admin" },
+
+    // 🔥 IMPORTANTE: evitar columnas createdAt / updatedAt
+    attributes: ["id", "nombre", "created_at", "updated_at"]
   });
+
   await Rol.findOrCreate({
     where: { nombre: "usuario" },
-    defaults: { nombre: "usuario" }
+    defaults: { nombre: "usuario" },
+
+    // 🔥 IMPORTANTE: evitar columnas createdAt / updatedAt
+    attributes: ["id", "nombre", "created_at", "updated_at"]
   });
 
   // Admin por .env
@@ -25,13 +33,15 @@ export async function initData() {
   }
 
   const existe = await Usuario.findOne({ where: { email } });
+
   if (!existe) {
     const hash = await bcrypt.hash(password, 10);
+
     await Usuario.create({
       nombres: "Admin",
       apellido_paterno: "Sistema",
       apellido_materno: "Interno",
-      rut: "11.111.111-1",        // Requerido por tu modelo (NOT NULL)
+      rut: "11.111.111-1",
       telefono: null,
       fecha_nacimiento: null,
       email,
@@ -39,6 +49,7 @@ export async function initData() {
       rol_id: adminRol.id,
       activo: true
     });
+
     console.log(`✅ Usuario admin creado: ${email}`);
   } else {
     console.log(`ℹ️ Usuario admin ya existe: ${email}`);
