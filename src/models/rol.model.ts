@@ -22,7 +22,12 @@ Rol.init(
     sequelize,
     tableName: "roles",
 
-    // 🔥 SOLUCIÓN FINAL
-    timestamps: false
+    // 🔥 CLAVE TOTAL
+    timestamps: false,
+
+    // 🔥 ESTO BLOQUEA createdAt internamente
+    defaultScope: {
+      attributes: ["id", "nombre", "created_at", "updated_at"]
+    }
   }
 );
