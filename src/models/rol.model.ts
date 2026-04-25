@@ -15,7 +15,6 @@ Rol.init(
     id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
     nombre: { type: DataTypes.STRING(50), allowNull: false, unique: true },
 
-    // 🔥 Mantienes tus columnas reales de BD
     created_at: { type: DataTypes.DATE, allowNull: true },
     updated_at: { type: DataTypes.DATE, allowNull: true }
   },
@@ -23,9 +22,7 @@ Rol.init(
     sequelize,
     tableName: "roles",
 
-    // 🔥 ESTA PARTE ES LA CLAVE
-    timestamps: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at"
+    // 🔥 SOLUCIÓN FINAL
+    timestamps: false
   }
 );
