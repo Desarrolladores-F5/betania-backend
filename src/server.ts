@@ -183,8 +183,13 @@ const PORT = Number(process.env.PORT || 3001);
 
 async function start() {
   try {
+    // Verifica conexión con MySQL
     await sequelize.authenticate();
-    await sequelize.sync();
+
+    // ⚠️ NO usar sequelize.sync() en producción.
+    // La base de datos ya existe y debe mantenerse tal como está.
+    // await sequelize.sync();
+
     await initData();
 
     app.listen(PORT, () => {

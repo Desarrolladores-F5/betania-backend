@@ -8,8 +8,8 @@ import {
 import sequelize from "../config/database";
 
 export class Curso extends Model<
-  InferAttributes<Curso>,
-  InferCreationAttributes<Curso>
+  InferAttributes<Curso, { omit: "created_at" | "updated_at" }>,
+  InferCreationAttributes<Curso, { omit: "created_at" | "updated_at" }>
 > {
   declare id: CreationOptional<number>;
   declare titulo: string;
@@ -18,7 +18,7 @@ export class Curso extends Model<
   declare publicado: boolean;
   declare activo: boolean;
 
-  // 👇 AHORA SÍ forman parte real del modelo
+  // Sequelize los maneja automáticamente
   declare created_at: CreationOptional<Date>;
   declare updated_at: CreationOptional<Date>;
 }
@@ -57,26 +57,16 @@ Curso.init(
       allowNull: false,
       defaultValue: true,
     },
-
-    // 👇 DEFINIDOS EXPLÍCITAMENTE
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
-
-    updated_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
   },
   {
     sequelize,
     tableName: "cursos",
 
-    // 🔥 CLAVE
-    timestamps: false,
+    timestamps: true,
+    underscored: true,
+
+    createdAt: "created_at",
+    updatedAt: "updated_at",
   }
 );
 
