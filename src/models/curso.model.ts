@@ -8,8 +8,8 @@ import {
 import sequelize from "../config/database";
 
 export class Curso extends Model<
-  InferAttributes<Curso, { omit: "created_at" | "updated_at" }>,
-  InferCreationAttributes<Curso, { omit: "created_at" | "updated_at" }>
+  InferAttributes<Curso>,
+  InferCreationAttributes<Curso>
 > {
   declare id: CreationOptional<number>;
   declare titulo: string;
@@ -18,7 +18,7 @@ export class Curso extends Model<
   declare publicado: boolean;
   declare activo: boolean;
 
-  // Sequelize los maneja automáticamente
+  // 👇 AHORA SÍ forman parte real del modelo
   declare created_at: CreationOptional<Date>;
   declare updated_at: CreationOptional<Date>;
 }
@@ -30,45 +30,54 @@ Curso.init(
       autoIncrement: true,
       primaryKey: true,
     },
+
     titulo: {
       type: DataTypes.STRING(255),
       allowNull: false,
     },
+
     descripcion: {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+
     portada_url: {
       type: DataTypes.STRING(1024),
       allowNull: true,
     },
+
     publicado: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
     },
+
     activo: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
+    // 👇 DEFINIDOS EXPLÍCITAMENTE
+    created_at: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+
+    updated_at: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
   },
   {
     sequelize,
     tableName: "cursos",
-    timestamps: true,
-    underscored: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at",
 
-    hooks: {
-      beforeCreate: (instance: any) => {
-        instance.created_at = new Date();
-        instance.updated_at = new Date();
-      },
-      beforeUpdate: (instance: any) => {
-        instance.updated_at = new Date();
-      },
-    },
+    // 🔥 CLAVE
+    timestamps: false,
   }
 );
+
+export default Curso;
