@@ -25,5 +25,10 @@ Curso.init(
     created_at: { type: DataTypes.DATE, allowNull: true },
     updated_at: { type: DataTypes.DATE, allowNull: true }
   },
-  { sequelize, tableName: "cursos" }
+  {
+    sequelize,
+    tableName: "cursos",
+    timestamps: true,
+    underscored: true
+  }
 );
