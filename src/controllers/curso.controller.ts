@@ -1,10 +1,36 @@
 // src/controllers/curso.controller.ts
+// src/controllers/curso.controller.ts
 import { Request, Response } from "express";
 import { Curso } from "../models/curso.model";
 import { Modulo } from "../models/modulo.model";
 import { Leccion } from "../models/leccion.model";
 import { ProgresoModulo } from "../models/progreso_modulo.model";
 import { ProgresoLeccion } from "../models/progreso_leccion.model";
+import { publicUrl } from "../utils/upload";
+
+/* ============================================================
+ *  HELPER PARA URLS PÚBLICAS
+ * ============================================================ */
+
+/**
+ * Convierte cualquier portada_url guardada en BD a una URL pública válida.
+ *
+ * Casos que corrige:
+ * - http://localhost:3001/uploads/images/archivo.png
+ * - https://otro-dominio/uploads/images/archivo.png
+ * - /uploads/images/archivo.png
+ *
+ * Resultado en producción:
+ * - https://betania-backend-production-3429.up.railway.app/uploads/images/archivo.png
+ */
+function normalizarArchivoUrl(req: Request, valor?: string | null) {
+  if (!valor) return null;
+
+  // Si viene como URL absoluta, dejamos solo el path desde /uploads/...
+  const soloPath = valor.replace(/^https?:\/\/[^/]+/, "");
+
+  return publicUrl(req, soloPath);
+}
 
 /* ============================================================
  *  CRUD ADMIN
@@ -13,6 +39,7 @@ import { ProgresoLeccion } from "../models/progreso_leccion.model";
 export const crearCurso = async (req: Request, res: Response) => {
   try {
     const { titulo, descripcion, portada_url, publicado, activo } = req.body;
+
     const curso = await Curso.create({
       titulo,
       descripcion: descripcion ?? null,
@@ -20,18 +47,35 @@ export const crearCurso = async (req: Request, res: Response) => {
       publicado: !!publicado,
       activo: activo ?? true,
     });
-    return res.status(201).json(curso);
+
+    const json = curso.toJSON() as any;
+
+    return res.status(201).json({
+      ...json,
+      portada_url: normalizarArchivoUrl(req, json.portada_url),
+    });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "No se pudo crear el curso" });
   }
 };
 
-export const listarCursosAdmin = async (_req: Request, res: Response) => {
+export const listarCursosAdmin = async (req: Request, res: Response) => {
   try {
     const cursos = await Curso.findAll({ order: [["id", "DESC"]] });
-    return res.json(cursos);
-  } catch {
+
+    const cursosConUrl = cursos.map((curso) => {
+      const json = curso.toJSON() as any;
+
+      return {
+        ...json,
+        portada_url: normalizarArchivoUrl(req, json.portada_url),
+      };
+    });
+
+    return res.json(cursosConUrl);
+  } catch (e) {
+    console.error("Error al listar cursos admin:", e);
     return res.status(500).json({ error: "Error al listar cursos" });
   }
 };
@@ -39,6 +83,7 @@ export const listarCursosAdmin = async (_req: Request, res: Response) => {
 export const obtenerCursoAdmin = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const curso = await Curso.findByPk(id, {
       include: [
         {
@@ -48,9 +93,17 @@ export const obtenerCursoAdmin = async (req: Request, res: Response) => {
         },
       ],
     });
+
     if (!curso) return res.status(404).json({ error: "Curso no encontrado" });
-    return res.json(curso);
-  } catch {
+
+    const json = curso.toJSON() as any;
+
+    return res.json({
+      ...json,
+      portada_url: normalizarArchivoUrl(req, json.portada_url),
+    });
+  } catch (e) {
+    console.error("Error al obtener curso admin:", e);
     return res.status(500).json({ error: "Error al obtener curso" });
   }
 };
@@ -58,11 +111,21 @@ export const obtenerCursoAdmin = async (req: Request, res: Response) => {
 export const actualizarCurso = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const curso = await Curso.findByPk(id);
+
     if (!curso) return res.status(404).json({ error: "Curso no encontrado" });
+
     await curso.update(req.body);
-    return res.json(curso);
-  } catch {
+
+    const json = curso.toJSON() as any;
+
+    return res.json({
+      ...json,
+      portada_url: normalizarArchivoUrl(req, json.portada_url),
+    });
+  } catch (e) {
+    console.error("Error al actualizar curso:", e);
     return res.status(500).json({ error: "Error al actualizar curso" });
   }
 };
@@ -70,11 +133,16 @@ export const actualizarCurso = async (req: Request, res: Response) => {
 export const eliminarCurso = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const curso = await Curso.findByPk(id);
+
     if (!curso) return res.status(404).json({ error: "Curso no encontrado" });
+
     await curso.destroy();
+
     return res.json({ ok: true });
-  } catch {
+  } catch (e) {
+    console.error("Error al eliminar curso:", e);
     return res.status(500).json({ error: "Error al eliminar curso" });
   }
 };
@@ -99,26 +167,21 @@ async function inicializarProgresoSiNecesario(
 
   const cursoId = Number(cursoInstancia.id);
 
-  // ¿Ya existe progreso para este usuario y curso?
   const yaExiste = await ProgresoModulo.count({
     where: { usuario_id: usuarioId, curso_id: cursoId },
   });
 
   if (yaExiste > 0) {
-    // Ya fue inicializado antes
     return;
   }
 
-  // Trabajamos sobre un JSON del curso para acceder a modulos/lecciones
   const json = cursoInstancia.toJSON() as any;
   const modulosRaw: any[] = Array.isArray(json.modulos) ? json.modulos : [];
 
   if (modulosRaw.length === 0) {
-    // No hay módulos, no hay nada que inicializar
     return;
   }
 
-  // Ordenamos módulos por orden, luego por id
   const modulosOrdenados = modulosRaw
     .map((m) => ({
       ...m,
@@ -139,7 +202,6 @@ async function inicializarProgresoSiNecesario(
 
   const ahora = new Date();
 
-  // 1) Crear progreso por módulo
   for (let i = 0; i < modulosOrdenados.length; i++) {
     const m = modulosOrdenados[i];
     const estadoModulo = i === 0 ? "disponible" : "bloqueado";
@@ -154,7 +216,6 @@ async function inicializarProgresoSiNecesario(
     });
   }
 
-  // 2) Crear progreso por lección SOLO para el primer módulo
   const primerModulo = modulosOrdenados[0];
   const leccionesRaw: any[] = Array.isArray(primerModulo.lecciones)
     ? primerModulo.lecciones
@@ -192,7 +253,7 @@ async function inicializarProgresoSiNecesario(
       modulo_id: primerModulo.id,
       leccion_id: l.id,
       estado: estadoLeccion as "bloqueada" | "disponible" | "completada",
-      aprobado: false, // requerido por el modelo / BD
+      aprobado: false,
       nota_ultima_prueba: null,
       fecha_completado: null,
     });
@@ -205,15 +266,24 @@ async function inicializarProgresoSiNecesario(
 
 /**
  * Listado de cursos visibles para el alumno.
- * Por ahora devolvemos todos los cursos (podrás filtrar después por inscripción).
  */
-export const listarCursosPublico = async (_req: Request, res: Response) => {
+export const listarCursosPublico = async (req: Request, res: Response) => {
   try {
     const cursos = await Curso.findAll({
       order: [["id", "DESC"]],
       attributes: ["id", "titulo", "descripcion", "portada_url"],
     });
-    return res.json(cursos);
+
+    const cursosConUrl = cursos.map((curso) => {
+      const json = curso.toJSON() as any;
+
+      return {
+        ...json,
+        portada_url: normalizarArchivoUrl(req, json.portada_url),
+      };
+    });
+
+    return res.json(cursosConUrl);
   } catch (e) {
     console.error("Error al listar cursos públicos:", e);
     return res
@@ -226,7 +296,7 @@ export const listarCursosPublico = async (_req: Request, res: Response) => {
  * Detalle del curso para el alumno:
  *  - Inicializa progreso de módulos y lecciones (si es la primera vez).
  *  - Devuelve SOLO módulos con su estado (bloqueado / disponible / completado).
- *  - NO devuelve aún las lecciones (eso lo haremos en la vista del módulo).
+ *  - NO devuelve aún las lecciones.
  */
 export const obtenerCursoConContenido = async (
   req: Request,
@@ -234,13 +304,14 @@ export const obtenerCursoConContenido = async (
 ) => {
   try {
     const { id } = req.params;
-    const user = req.user; // viene de requireAuth
+    const user = req.user;
+
     if (!user?.id) {
       return res.status(401).json({ error: "No autenticado" });
     }
+
     const usuarioId = Number(user.id);
 
-    // Traemos el curso con módulos + lecciones (las lecciones solo para inicializar progreso)
     const curso = await Curso.findOne({
       where: { id },
       attributes: ["id", "titulo", "descripcion", "portada_url"],
@@ -270,15 +341,12 @@ export const obtenerCursoConContenido = async (
       return res.status(404).json({ error: "Curso no disponible" });
     }
 
-    // 1) Inicializar progreso (solo la primera vez)
     await inicializarProgresoSiNecesario(curso, usuarioId);
 
-    // 2) Volvemos a cargar progreso de módulos para este usuario+curso
     const progresoModulos = await ProgresoModulo.findAll({
       where: { usuario_id: usuarioId, curso_id: Number(curso.id) },
     });
 
-    // 3) Armamos respuesta JSON: solo módulos con su estado
     const json = curso.toJSON() as any;
 
     const modulosRaw: any[] = Array.isArray(json.modulos) ? json.modulos : [];
@@ -304,6 +372,7 @@ export const obtenerCursoConContenido = async (
         const prog = progresoModulos.find(
           (p) => Number(p.modulo_id) === Number(m.id)
         );
+
         return {
           id: m.id,
           titulo: m.titulo,
@@ -317,7 +386,7 @@ export const obtenerCursoConContenido = async (
       id: Number(json.id),
       titulo: json.titulo,
       descripcion: json.descripcion,
-      portada_url: json.portada_url,
+      portada_url: normalizarArchivoUrl(req, json.portada_url),
       modulos: modulosOrdenados,
     };
 
