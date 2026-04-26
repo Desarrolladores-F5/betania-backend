@@ -1,5 +1,4 @@
 // src/controllers/curso.controller.ts
-// src/controllers/curso.controller.ts
 import { Request, Response } from "express";
 import { Curso } from "../models/curso.model";
 import { Modulo } from "../models/modulo.model";
@@ -62,7 +61,19 @@ export const crearCurso = async (req: Request, res: Response) => {
 
 export const listarCursosAdmin = async (req: Request, res: Response) => {
   try {
-    const cursos = await Curso.findAll({ order: [["id", "DESC"]] });
+    const cursos = await Curso.findAll({
+      order: [["id", "DESC"]],
+      attributes: [
+        "id",
+        "titulo",
+        "descripcion",
+        "portada_url",
+        "publicado",
+        "activo",
+        "created_at",
+        "updated_at",
+      ],
+    });
 
     const cursosConUrl = cursos.map((curso) => {
       const json = curso.toJSON() as any;
