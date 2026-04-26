@@ -30,28 +30,23 @@ Curso.init(
       autoIncrement: true,
       primaryKey: true,
     },
-
     titulo: {
       type: DataTypes.STRING(255),
       allowNull: false,
     },
-
     descripcion: {
       type: DataTypes.TEXT,
       allowNull: true,
     },
-
     portada_url: {
       type: DataTypes.STRING(1024),
       allowNull: true,
     },
-
     publicado: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
     },
-
     activo: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -61,11 +56,19 @@ Curso.init(
   {
     sequelize,
     tableName: "cursos",
-
     timestamps: true,
     underscored: true,
-
     createdAt: "created_at",
     updatedAt: "updated_at",
+
+    hooks: {
+      beforeCreate: (instance: any) => {
+        instance.created_at = new Date();
+        instance.updated_at = new Date();
+      },
+      beforeUpdate: (instance: any) => {
+        instance.updated_at = new Date();
+      },
+    },
   }
 );
