@@ -73,21 +73,25 @@ export const listarCursosAdmin = async (req: Request, res: Response) => {
         "created_at",
         "updated_at",
       ],
+      raw: true, // 🔥 evita problemas con toJSON y Sequelize internals
     });
 
-    const cursosConUrl = cursos.map((curso) => {
-      const json = curso.toJSON() as any;
-
+    const cursosConUrl = cursos.map((curso: any) => {
       return {
-        ...json,
-        portada_url: normalizarArchivoUrl(req, json.portada_url),
+        ...curso,
+        portada_url: normalizarArchivoUrl(req, curso.portada_url),
       };
     });
 
     return res.json(cursosConUrl);
-  } catch (e) {
-    console.error("Error al listar cursos admin:", e);
-    return res.status(500).json({ error: "Error al listar cursos" });
+  } catch (e: any) {
+    console.error("🔥 ERROR REAL cursos admin:", e);
+
+    return res.status(500).json({
+      error: "Error al listar cursos",
+      detalle: e?.message,
+      stack: e?.stack,
+    });
   }
 };
 
