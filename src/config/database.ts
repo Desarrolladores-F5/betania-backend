@@ -6,13 +6,27 @@ dotenv.config();
 
 let sequelize: Sequelize;
 
+// 👉 CONFIGURACIÓN GLOBAL (CLAVE DEL FIX)
+const commonConfig = {
+  dialect: "mysql" as const,
+  logging: false,
+
+  // 🔥 SOLUCIÓN DEFINITIVA PARA TIMESTAMPS
+  define: {
+    timestamps: true,
+    underscored: true,
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+  },
+};
+
 // 👉 PRODUCCIÓN (Railway)
 if (process.env.MYSQL_PUBLIC_URL) {
   console.log("🌐 Conectando a Railway MySQL...");
 
   sequelize = new Sequelize(process.env.MYSQL_PUBLIC_URL, {
-    dialect: "mysql",
-    logging: false,
+    ...commonConfig,
+
     dialectOptions: {
       ssl: {
         require: true,
@@ -38,10 +52,9 @@ if (process.env.MYSQL_PUBLIC_URL) {
   }
 
   sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, {
-    dialect: "mysql",
+    ...commonConfig,
     host: DB_HOST,
     port: Number(DB_PORT),
-    logging: false,
   });
 }
 
