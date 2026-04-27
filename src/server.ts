@@ -45,8 +45,9 @@ import adminMailRoutes from "./routes/admin.mail.routes";
 
 dotenv.config();
 
-const app = express();
+console.log("🔥 BACKEND NUEVO EJECUTANDO 🔥", new Date().toISOString());
 
+const app = express();
 // ==================================================
 // 🛡️ Seguridad global
 // ==================================================
