@@ -91,14 +91,12 @@ export const listarCursosAdmin = async (req: Request, res: Response) => {
     }));
 
     return res.json(cursosConUrl);
-
   } catch (e: any) {
-    console.error("🔥 ERROR REAL cursos admin:", {
-      message: e?.message,
-      sql: e?.sql,
-      parameters: e?.parameters,
-      stack: e?.stack,
-    });
+    console.error("💣 ERROR COMPLETO:", e);
+    console.error("💣 MESSAGE:", e?.message);
+    console.error("💣 SQL:", e?.sql);
+    console.error("💣 PARAMETERS:", e?.parameters);
+    console.error("💣 STACK:", e?.stack);
 
     return res.status(500).json({
       error: "Error al listar cursos",
