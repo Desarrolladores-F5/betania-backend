@@ -61,6 +61,15 @@ export const crearCurso = async (req: Request, res: Response) => {
 
 export const listarCursosAdmin = async (req: Request, res: Response) => {
   try {
+    // 🧪 DEBUG CLAVE
+    console.log("🧪 Curso config:", {
+      tableName: Curso.getTableName(),
+      timestamps: (Curso as any).options.timestamps,
+      createdAt: (Curso as any).options.createdAt,
+      updatedAt: (Curso as any).options.updatedAt,
+      attributes: Object.keys(Curso.getAttributes()),
+    });
+
     const cursos = await Curso.findAll({
       order: [["id", "DESC"]],
       attributes: [
@@ -73,24 +82,28 @@ export const listarCursosAdmin = async (req: Request, res: Response) => {
         "created_at",
         "updated_at",
       ],
-      raw: true, // 🔥 evita problemas con toJSON y Sequelize internals
+      raw: true,
     });
 
-    const cursosConUrl = cursos.map((curso: any) => {
-      return {
-        ...curso,
-        portada_url: normalizarArchivoUrl(req, curso.portada_url),
-      };
-    });
+    const cursosConUrl = cursos.map((curso: any) => ({
+      ...curso,
+      portada_url: normalizarArchivoUrl(req, curso.portada_url),
+    }));
 
     return res.json(cursosConUrl);
+
   } catch (e: any) {
-    console.error("🔥 ERROR REAL cursos admin:", e);
+    console.error("🔥 ERROR REAL cursos admin:", {
+      message: e?.message,
+      sql: e?.sql,
+      parameters: e?.parameters,
+      stack: e?.stack,
+    });
 
     return res.status(500).json({
       error: "Error al listar cursos",
       detalle: e?.message,
-      stack: e?.stack,
+      sql: e?.sql,
     });
   }
 };
