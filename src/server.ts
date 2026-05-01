@@ -61,8 +61,8 @@ app.use(
 // ==================================================
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://frontend-betania-production.up.railway.app",
-];
+  process.env.FRONTEND_URL, // 👈 dinámico para Railway
+].filter(Boolean);
 
 const corsOptions: CorsOptions = {
   origin(origin, callback) {
