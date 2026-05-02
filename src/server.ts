@@ -83,7 +83,17 @@ app.use(morgan("dev"));
 // ==================================================
 // 📁 Archivos estáticos
 // ==================================================
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+const uploadsPath = path.join(process.cwd(), "uploads");
+const uploadsDistPath = path.join(process.cwd(), "dist/uploads");
+
+// Usa dist/uploads si existe (producción), sino uploads (local)
+const finalUploadsPath = require("fs").existsSync(uploadsDistPath)
+  ? uploadsDistPath
+  : uploadsPath;
+
+console.log("📁 Serviendo archivos desde:", finalUploadsPath);
+
+app.use("/uploads", express.static(finalUploadsPath));
 
 // ==================================================
 // ❤️ Healthcheck
