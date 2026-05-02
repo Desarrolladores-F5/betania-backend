@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "tsc && cp -R uploads dist/uploads",
     "start": "node dist/server.js"
   },
   "dependencies": {
