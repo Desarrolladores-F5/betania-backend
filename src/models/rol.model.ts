@@ -17,5 +17,11 @@ Rol.init(
     created_at: { type: DataTypes.DATE, allowNull: true },
     updated_at: { type: DataTypes.DATE, allowNull: true }
   },
-  { sequelize, tableName: "roles" }
+  {
+    sequelize,
+    tableName: "roles",
+    timestamps: true, // 👈 importante
+    createdAt: "created_at", // 🔥 mapeo correcto
+    updatedAt: "updated_at", // 🔥 mapeo correcto
+  }
 );
