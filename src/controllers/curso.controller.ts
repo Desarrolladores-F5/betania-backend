@@ -13,6 +13,7 @@ import { ProgresoLeccion } from "../models/progreso_leccion.model";
 export const crearCurso = async (req: Request, res: Response) => {
   try {
     const { titulo, descripcion, portada_url, publicado, activo } = req.body;
+
     const curso = await Curso.create({
       titulo,
       descripcion: descripcion ?? null,
@@ -20,25 +21,47 @@ export const crearCurso = async (req: Request, res: Response) => {
       publicado: !!publicado,
       activo: activo ?? true,
     });
+
     return res.status(201).json(curso);
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "No se pudo crear el curso" });
+  } catch (e: any) {
+    console.error("🔥 ERROR REAL crear curso:", {
+      message: e?.message,
+      name: e?.name,
+      stack: e?.stack,
+    });
+
+    return res.status(500).json({
+      error: "No se pudo crear el curso",
+      detalle: e?.message,
+    });
   }
 };
 
 export const listarCursosAdmin = async (_req: Request, res: Response) => {
   try {
-    const cursos = await Curso.findAll({ order: [["id", "DESC"]] });
+    const cursos = await Curso.findAll({
+      order: [["id", "DESC"]],
+    });
+
     return res.json(cursos);
-  } catch {
-    return res.status(500).json({ error: "Error al listar cursos" });
+  } catch (e: any) {
+    console.error("🔥 ERROR REAL cursos admin:", {
+      message: e?.message,
+      name: e?.name,
+      stack: e?.stack,
+    });
+
+    return res.status(500).json({
+      error: "Error al listar cursos",
+      detalle: e?.message,
+    });
   }
 };
 
 export const obtenerCursoAdmin = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const curso = await Curso.findByPk(id, {
       include: [
         {
@@ -48,34 +71,77 @@ export const obtenerCursoAdmin = async (req: Request, res: Response) => {
         },
       ],
     });
-    if (!curso) return res.status(404).json({ error: "Curso no encontrado" });
+
+    if (!curso) {
+      return res.status(404).json({ error: "Curso no encontrado" });
+    }
+
     return res.json(curso);
-  } catch {
-    return res.status(500).json({ error: "Error al obtener curso" });
+  } catch (e: any) {
+    console.error("🔥 ERROR REAL obtener curso admin:", {
+      message: e?.message,
+      name: e?.name,
+      stack: e?.stack,
+    });
+
+    return res.status(500).json({
+      error: "Error al obtener curso",
+      detalle: e?.message,
+    });
   }
 };
 
 export const actualizarCurso = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const curso = await Curso.findByPk(id);
-    if (!curso) return res.status(404).json({ error: "Curso no encontrado" });
+
+    if (!curso) {
+      return res.status(404).json({ error: "Curso no encontrado" });
+    }
+
     await curso.update(req.body);
+
     return res.json(curso);
-  } catch {
-    return res.status(500).json({ error: "Error al actualizar curso" });
+  } catch (e: any) {
+    console.error("🔥 ERROR REAL actualizar curso:", {
+      message: e?.message,
+      name: e?.name,
+      stack: e?.stack,
+    });
+
+    return res.status(500).json({
+      error: "Error al actualizar curso",
+      detalle: e?.message,
+    });
   }
 };
 
 export const eliminarCurso = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
     const curso = await Curso.findByPk(id);
-    if (!curso) return res.status(404).json({ error: "Curso no encontrado" });
+
+    if (!curso) {
+      return res.status(404).json({ error: "Curso no encontrado" });
+    }
+
     await curso.destroy();
+
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ error: "Error al eliminar curso" });
+  } catch (e: any) {
+    console.error("🔥 ERROR REAL eliminar curso:", {
+      message: e?.message,
+      name: e?.name,
+      stack: e?.stack,
+    });
+
+    return res.status(500).json({
+      error: "Error al eliminar curso",
+      detalle: e?.message,
+    });
   }
 };
 
